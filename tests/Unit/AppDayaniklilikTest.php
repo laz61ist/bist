@@ -7,6 +7,7 @@ namespace Bist\Tests\Unit;
 use Bist\App;
 use Bist\Data\BosKaynak;
 use Bist\Data\KriterDeposu;
+use Bist\Http\Yetki;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -32,6 +33,8 @@ final class AppDayaniklilikTest extends TestCase
         @rmdir($this->okunamazDizin);
     }
 
+    private const TOKEN = 'gizli-token-en-az-yirmi-karakter';
+
     private function bozukDepoluApp(): App
     {
         // Depo TEMBEL olmali: kurulum aninda DB'ye dokunmamali
@@ -39,6 +42,7 @@ final class AppDayaniklilikTest extends TestCase
             kaynak: new BosKaynak(),
             depoSaglayici: fn (): KriterDeposu
                 => new KriterDeposu($this->okunamazDizin . '/olmayan/bist.sqlite'),
+            yetki: new Yetki(self::TOKEN),
         );
     }
 
@@ -79,7 +83,7 @@ final class AppDayaniklilikTest extends TestCase
 
     public function testDbErisilemezkenKriterYolu503Doner(): void
     {
-        $cevap = $this->bozukDepoluApp()->calistir('/kriter');
+        $cevap = $this->bozukDepoluApp()->calistir('/kriter', 'GET', sunulanToken: self::TOKEN);
 
         self::assertSame(503, $cevap['durum']);
         self::assertStringNotContainsString('/home/', $cevap['govde']);
@@ -91,7 +95,7 @@ final class AppDayaniklilikTest extends TestCase
         $cevap = $this->bozukDepoluApp()->calistir('/kriter', 'POST', [], [
             'ad' => 'Set',
             'kriterler' => [['ad' => 'F/K', 'anahtar' => 'fk', 'operator' => '<', 'esik' => 12]],
-        ]);
+        ], sunulanToken: self::TOKEN);
 
         self::assertSame(503, $cevap['durum']);
     }
@@ -126,7 +130,7 @@ final class AppDayaniklilikTest extends TestCase
 
     public function testKriterYolundaYazmaDisiMetodlar405Doner(): void
     {
-        $app = new App(new BosKaynak(), new KriterDeposu(':memory:'));
+        $app = new App(new BosKaynak(), new KriterDeposu(':memory:'), yetki: new Yetki(self::TOKEN));
 
         foreach (['PUT', 'DELETE', 'PATCH'] as $metod) {
             $cevap = $app->calistir('/kriter', $metod);
@@ -136,9 +140,9 @@ final class AppDayaniklilikTest extends TestCase
 
     public function testGetVeHeadKriterYolundaCalisir(): void
     {
-        $app = new App(new BosKaynak(), new KriterDeposu(':memory:'));
+        $app = new App(new BosKaynak(), new KriterDeposu(':memory:'), yetki: new Yetki(self::TOKEN));
 
-        self::assertSame(200, $app->calistir('/kriter', 'GET')['durum']);
-        self::assertSame(200, $app->calistir('/kriter', 'HEAD')['durum']);
+        self::assertSame(200, $app->calistir('/kriter', 'GET', sunulanToken: self::TOKEN)['durum']);
+        self::assertSame(200, $app->calistir('/kriter', 'HEAD', sunulanToken: self::TOKEN)['durum']);
     }
 }

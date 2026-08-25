@@ -7,6 +7,7 @@ namespace Bist\Tests\Unit;
 use Bist\App;
 use Bist\Data\BosKaynak;
 use Bist\Data\KriterDeposu;
+use Bist\Http\Yetki;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -30,15 +31,22 @@ final class AppGirdiSiniriTest extends TestCase
         @unlink($this->db);
     }
 
+    private const TOKEN = 'gizli-token-en-az-yirmi-karakter';
+
     private function app(): App
     {
-        return new App(new BosKaynak(), new KriterDeposu($this->db));
+        // Bu sinif girdi sinirlarini olcuyor; yetki D6/AppYetkiTest'in isi.
+        return new App(
+            kaynak: new BosKaynak(),
+            depo: new KriterDeposu($this->db),
+            yetki: new Yetki(self::TOKEN),
+        );
     }
 
     /** @param array<mixed> $post */
     private function kaydet(array $post): array
     {
-        return $this->app()->calistir('/kriter', 'POST', [], $post);
+        return $this->app()->calistir('/kriter', 'POST', [], $post, sunulanToken: self::TOKEN);
     }
 
     private function kriter(string $ad = 'F/K'): array
