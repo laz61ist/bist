@@ -257,6 +257,15 @@ jobs:
           bosluk2=hayir; case "$G" in *" "*) bosluk2=evet;; esac
           echo "token icinde bosluk var             : $bosluk2"
           echo
+          # Bu uc nitelik birden 'evet' ise sebep tektir ve tahmin degildir:
+          # alana kullanici adi yerine bir komut satiri yapistirilmistir.
+          if [ "$bosluk" = evet ] && [ "$kolon" = evet ] && [ "$egik" = evet ]; then
+            echo ">> DOCKERHUB_USERNAME alanina bir KOMUT SATIRI yapistirilmis"
+            echo "   gorunuyor (ornek: 'docker push kullanici/imaj:etiket')."
+            echo "   O alana YALNIZCA kullanici adi yazilir; komutun tamami,"
+            echo "   imaj adi ya da etiket yazilmaz."
+            echo
+          fi
           echo "Beklenen: kullanici adi sade bir Docker Hub kullanici adi"
           echo "(bosluk, iki nokta, egik cizgi YOK). Token ise Docker Hub"
           echo "> Account settings > Personal access tokens ile uretilmis,"
