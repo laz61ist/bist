@@ -137,6 +137,38 @@ etiketle damgala, kökte `LICENSE`, `main` dalına branch protection.
 
 ---
 
+### D9 · KRİTİK: Girdi boyutu sınırsız `S`
+**Sorun — ölçüldü:** 200.000 kriterlik 12 MB gövde → `201 Created`, **5,13 sn CPU**,
+sqlite 12 MB. `post_max_size = 8M` ayarlı olmasına rağmen kabul edildi; PHP bu
+limiti `application/json` gövdelerine uygulamıyor, tek fren `memory_limit`.
+
+**Yapılacak:** Gövdeyi okumadan önce `Content-Length` eşiği (64 KB) → 413;
+`strlen($ham)` kontrolü; `json_decode(..., 8, JSON_THROW_ON_ERROR)` derinlik
+sınırı; `mb_strlen($ad) <= 120`, `mb_strlen($gerekce) <= 2000`,
+`count($kriterler) <= 50`; vekilde IP başına yazma limiti.
+
+**Test önce:** `testCokBuyukGovde413Doner`, `testCokFazlaKriter422Doner`,
+`testDerinIcIceJsonReddedilir`, `testSinirdakiGecerliGovdeKabulEdilir`
+
+**Bağımlılık:** yok, paralel · **Kabul:** K11 · **GitHub:** #13
+
+---
+
+### D10 · YÜKSEK: CI ayrıcalık genişliği `S`
+**Sorun:** `.github/workflows/pages.yml:8-11` izinleri workflow düzeyinde
+(`pages: write`, `id-token: write`) ve `test` job'ına miras kalıyor. O job
+sabitlenmemiş `shivammathur/setup-php@v2`, pinlenmemiş `markdown>=3.5` ve
+`--no-scripts`siz `composer install` çalıştırıyor. Üç tedarik zinciri
+noktasından biri ele geçerse test job'ı OIDC token basıp Pages'e yayın yapar.
+
+**Yapılacak:** Workflow düzeyini `contents: read`e indir; `pages: write` +
+`id-token: write` yalnızca `deploy` job'ında; action'ları commit SHA'sına
+sabitle; `requirements.txt`'yi `==` ile pinle; `composer install --no-scripts`.
+
+**Bağımlılık:** yok, paralel · **Kabul:** K12 · **GitHub:** #14
+
+---
+
 ## Deploy'dan SONRA yapılabilecekler
 
 | # | İş | Efor | Not |
@@ -147,6 +179,13 @@ etiketle damgala, kökte `LICENSE`, `main` dalına branch protection.
 | S4 | `composer.json` PHP kısıtını `^8.3` yap | S | `>=8.3` üst sınırsız; PHP 9'da composer memnun, uygulama muhtemelen bozuk |
 | S5 | `dist/` zip'lerini Release varlığına taşı | S | Üretilen artefakt kaynak kontrolünde durmamalı |
 | S6 | Yedekten geri yükleme provası | S | Denemeden yedeğin olduğunu söyleyemezsin |
+| S7 | CSRF + form-encoded gövde reddi | M | `application/x-www-form-urlencoded` ile yazma kanıtlandı; D6 çözülünce açık hazır bekliyor |
+| S8 | HTTP metod ayrımı | S | `PUT`/`DELETE`/`PATCH` → 200 + tam liste (kanıtlandı) |
+| S9 | İstisna mesajı sızıntısı | S | `{"hata":"... enum Bist\\Domain\\Operator"}` (kanıtlandı) |
+| S10 | Regex satır sonu kabul ediyor | S | `?sirket=TTRAK%0A` doğrulamayı geçiyor (kanıtlandı) |
+| S11 | `composer.json` ext bildirimi + `^8.3` | S | `ext-pdo_sqlite`, `ext-mbstring` beyan edilmemiş |
+
+Tamamı GitHub'da: #15
 
 ## Bağımlılık grafiği
 
@@ -155,8 +194,14 @@ D1 (env) ──┬─→ D2 (Dockerfile) ──┬─→ D3 (kalıcı veri)
            │                      └─→ D8 (sürüm/rollback)
            └─→ D4 (hata/log) ────────→ D5 (sağlık)
 
-D6 (erişim denetimi)  ── bağımsız
-D7 (E2E CI)           ── bağımsız
+D6 (erişim denetimi)  ─┐
+D9 (boyut sınırı)     ─┼─ bağımsız, paralel yürür
+D10 (CI izinleri)     ─┤
+D7 (E2E CI)           ─┘
 ```
 
-D6 ve D7 paralel yürütülebilir; diğerleri sıralı.
+D6, D7, D9 ve D10 paralel yürütülebilir; diğerleri sıralı.
+
+## GitHub takibi
+
+Kapsayıcı issue: #4 · D1-D10: #5-#14 · Deploy sonrası: #15
