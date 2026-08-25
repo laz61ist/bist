@@ -1,0 +1,21 @@
+{
+    "name": "laz61ist/bist",
+    "description": "BIST kokpit panosu - kaynakli finansal analiz araci",
+    "type": "project",
+    "license": "Apache-2.0",
+    "require": {
+        "php": ">=8.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": { "Bist\\": "src/" }
+    },
+    "autoload-dev": {
+        "psr-4": { "Bist\\Tests\\": "tests/" }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
