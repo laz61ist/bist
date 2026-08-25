@@ -119,7 +119,7 @@ kontrol(!tasma, 'Mobilde yatay tasma yok');
 await p.screenshot({ path: `${OUT}/e2e-02-mobil.png`, fullPage: false });
 await p.setViewportSize({ width: 1400, height: 950 });
 
-konsolTopla = false; // bundan sonraki adimlar kasitli 404/422 uretiyor
+konsolTopla = false; // bundan sonraki adimlar kasitli 404/413/422/405 uretiyor
 console.log('\n[12] sqlite · kriter seti kaydediliyor (G-19 hesap verebilirlik)');
 const kayit = await p.evaluate(async (base) => {
   const r = await fetch(base + '/kriter', {
@@ -157,7 +157,56 @@ const bos = await p.evaluate(async (base) => {
 kontrol(bos.durum === 422, `Bos set reddedildi (HTTP ${bos.durum})`);
 kontrol((bos.govde.hata || '').includes('eşik'), 'Red gerekcesi esik yoklugu');
 
-console.log('\n[14] konsol temizligi');
+console.log('\n[14] D9 (#13) · govde boyutu siniri');
+const buyuk = await p.evaluate(async (base) => {
+  const kriter = { ad: 'F/K', anahtar: 'fk', operator: '<', esik: 1 };
+  const r = await fetch(base + '/kriter', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad: 'saldiri', kriterler: Array(200000).fill(kriter) }),
+  });
+  return r.status;
+}, BASE);
+kontrol(buyuk === 413, `12 MB govde reddedildi (HTTP ${buyuk})`);
+
+const cokKriter = await p.evaluate(async (base) => {
+  const kriter = { ad: 'F/K', anahtar: 'fk', operator: '<', esik: 1 };
+  const r = await fetch(base + '/kriter', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad: 'cok', kriterler: Array(51).fill(kriter) }),
+  });
+  return r.status;
+}, BASE);
+kontrol(cokKriter === 422, `51 kriter reddedildi (HTTP ${cokKriter})`);
+
+const kotuOp = await p.evaluate(async (base) => {
+  const r = await fetch(base + '/kriter', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad: 'x', kriterler: [{ ad: 'F/K', anahtar: 'fk', operator: 'DROP', esik: 1 }] }),
+  });
+  return { durum: r.status, govde: await r.text() };
+}, BASE);
+kontrol(kotuOp.durum === 422 && !kotuOp.govde.includes('Bist\\'),
+  'Gecersiz operator ic namespace sizdirmiyor');
+
+console.log('\n[15] D4 (#8) · metod ayrimi ve yol ifsasi');
+for (const m of ['PUT', 'DELETE', 'PATCH']) {
+  const d = await p.evaluate(async (a) => (await fetch(a.base + '/kriter', { method: a.m })).status,
+    { base: BASE, m });
+  kontrol(d === 405, `${m} -> 405 (once 200 + tam liste doniyordu)`);
+}
+
+const dizi = await p.goto(BASE + '/?sirket[]=x', { waitUntil: 'networkidle' });
+const diziGovde = await p.locator('body').innerText();
+kontrol(dizi.status() === 200 && !/Warning|Array to string|\/home\//.test(diziGovde),
+  '?sirket[]=x uyari veya dosya yolu sizdirmiyor');
+
+const satirSonu = await p.evaluate(async (base) =>
+  (await fetch(base + '/?sirket=TTRAK%0A')).status, BASE);
+kontrol(satirSonu === 200, `?sirket=TTRAK%0A guvenli isleniyor (HTTP ${satirSonu})`);
+
+await p.goto(BASE + '/', { waitUntil: 'networkidle' });
+
+console.log('\n[16] konsol temizligi');
 kontrol(konsol.length === 0, `Konsol hatasi yok (${konsol.join(' | ') || 'temiz'})`);
 
 await b.close();

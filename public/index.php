@@ -7,25 +7,36 @@ use Bist\Config\Ayarlar;
 use Bist\Data\BosKaynak;
 use Bist\Data\KriterDeposu;
 use Bist\Http\GovdeHatasi;
+use Bist\Http\HataYakalayici;
 use Bist\Http\GovdeOkuyucu;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $ayarlar = Ayarlar::global(dirname(__DIR__));
 
-// 0o770: dizin dunyaya yazilabilir olmamali (#15/S6). @ kullanilmiyor;
-// basarisizlik gizlenirse teshis imkansizlasir.
-$dbDizini = dirname($ayarlar->dbYolu);
-if (!is_dir($dbDizini) && !mkdir($dbDizini, 0o770, true) && !is_dir($dbDizini)) {
-    http_response_code(500);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo 'Veri dizini oluşturulamadı.';
-    exit;
-}
+// D4 (#8): Yakalanmamis istisna ve uyarilar buradan sonra kullaniciya
+// sizmaz. Once DB acilamayinca tam PDOException yigin izi doniyordu,
+// ustelik HTTP 200 OK ile.
+(new HataYakalayici($ayarlar->ortam))->bagla();
 
+// Depo TEMBEL: kokpit istegi DB'ye hic dokunmaz, disk salt okunur olsa
+// bile ana sayfa acilir (K6).
+//
+// Dizin olusturma da bu kapanisin ICINDE: onceden ust seviyede kosulsuz
+// calisiyordu ve DB yolu yazilamaz oldugunda kokpiti de dusuruyordu.
+// Birim testi App'i dogrudan test ettigi icin bunu gormemisti; canli
+// dogrulamada yakalandi.
 $app = new App(
     kaynak: new BosKaynak(),
-    depo: new KriterDeposu($ayarlar->dbYolu),
+    depoSaglayici: static function () use ($ayarlar): KriterDeposu {
+        // 0o770: dizin dunyaya yazilabilir olmamali (#15/S6).
+        $dizin = dirname($ayarlar->dbYolu);
+        if (!is_dir($dizin) && !mkdir($dizin, 0o770, true) && !is_dir($dizin)) {
+            throw new RuntimeException("Veri dizini oluşturulamadı: {$dizin}");
+        }
+
+        return new KriterDeposu($ayarlar->dbYolu);
+    },
 );
 
 $yol = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -55,4 +66,9 @@ http_response_code($cevap['durum']);
 header('Content-Type: ' . $cevap['tur']);
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
+
+foreach ($cevap['basliklar'] ?? [] as $ad => $deger) {
+    header($ad . ': ' . $deger);
+}
+
 echo $cevap['govde'];
