@@ -24,14 +24,63 @@ final class KriterDeposu
 {
     private PDO $pdo;
 
-    public function __construct(string $dosya)
+    public function __construct(private readonly string $dosya)
     {
         $this->pdo = new PDO('sqlite:' . $dosya, options: [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
+
         $this->pdo->exec('PRAGMA foreign_keys = ON');
+
+        // D3 (#7): WAL, tek instance icinde bile es zamanli istekte
+        // "database is locked" hatalarini azaltir. :memory: WAL
+        // desteklemez, orada sessizce atlanir.
+        if ($dosya !== ':memory:') {
+            $this->pdo->exec('PRAGMA journal_mode = WAL');
+        }
+
+        // Kilit bekleme suresi; olmadan es zamanli yazma aninda patlar.
+        $this->pdo->exec('PRAGMA busy_timeout = 5000');
+
         $this->semaKur();
+    }
+
+    /** Bir PRAGMA degerini okur. Dagitim dogrulamasi ve test icin. */
+    public function pragma(string $ad): string
+    {
+        if (!preg_match('/\A[a-z_]+\z/', $ad)) {
+            throw new RuntimeException("Geçersiz PRAGMA adı: {$ad}");
+        }
+
+        return (string) $this->pdo->query("PRAGMA {$ad}")?->fetchColumn();
+    }
+
+    /**
+     * Veritabaninin tutarli bir kopyasini alir.
+     *
+     * VACUUM INTO, dosyayi kopyalamaktan farkli olarak acik bir yazma
+     * islemi sirasinda da tutarli sonuc verir — WAL modunda dosya
+     * kopyalamak bozuk yedek uretebilir.
+     */
+    public function yedekle(string $hedef): void
+    {
+        $dizin = dirname($hedef);
+        if (!is_dir($dizin)) {
+            // @ ile bastirilan uyari, hemen ardindan istisnaya tasiniyor;
+            // tani kaybolmuyor, yalnizca cift raporlama onleniyor.
+            if (!@mkdir($dizin, 0o770, true) && !is_dir($dizin)) {
+                $neden = error_get_last()['message'] ?? 'bilinmeyen neden';
+                throw new RuntimeException("Yedek dizini oluşturulamadı ({$dizin}): {$neden}");
+            }
+        }
+
+        try {
+            $st = $this->pdo->prepare('VACUUM INTO :hedef');
+            $st->execute([':hedef' => $hedef]);
+        } catch (\Throwable $e) {
+            throw new RuntimeException("Yedek alınamadı: {$hedef}", previous: $e);
+        }
     }
 
     private function semaKur(): void

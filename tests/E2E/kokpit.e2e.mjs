@@ -12,6 +12,8 @@ const BASE = process.env.E2E_BASE || 'http://127.0.0.1:8200';
 const OUT = process.env.E2E_SHOT_DIR || '/tmp';
 // Tarayici yolu verilmezse Playwright kendi indirdigini bulur.
 const CHROME = process.env.E2E_CHROME || undefined;
+const TOKEN = process.env.BIST_YAZMA_TOKEN || '';
+const YETKI = TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {};
 
 const hatalar = [];
 let gecen = 0;
@@ -121,10 +123,11 @@ await p.setViewportSize({ width: 1400, height: 950 });
 
 konsolTopla = false; // bundan sonraki adimlar kasitli 404/413/422/405 uretiyor
 console.log('\n[12] sqlite · kriter seti kaydediliyor (G-19 hesap verebilirlik)');
-const kayit = await p.evaluate(async (base) => {
+const kayit = await p.evaluate(async (a) => {
+  const base = a.base;
   const r = await fetch(base + '/kriter', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...a.yetki },
     body: JSON.stringify({
       ad: 'Muhafazakâr set',
       gerekce: 'Borçlu şirket istemiyorum.',
@@ -135,63 +138,65 @@ const kayit = await p.evaluate(async (base) => {
     }),
   });
   return { durum: r.status, govde: await r.json() };
-}, BASE);
+}, { base: BASE, yetki: YETKI });
 kontrol(kayit.durum === 201, `Kriter seti kaydedildi (HTTP ${kayit.durum})`);
 kontrol(typeof kayit.govde.id === 'number', 'Kayit id dondu');
 
-const liste = await p.evaluate(async (base) => (await fetch(base + '/kriter')).json(), BASE);
+const liste = await p.evaluate(async (a) =>
+  (await fetch(a.base + '/kriter', { headers: a.yetki })).json(), { base: BASE, yetki: YETKI });
 const kaydimiz = liste.setler.find(s => s.id === kayit.govde.id);
 kontrol(kaydimiz !== undefined, 'Kaydedilen set listede bulundu');
 kontrol(kaydimiz?.gerekce === 'Borçlu şirket istemiyorum.', 'Kullanicinin gerekcesi saklandi');
 kontrol(kaydimiz?.kriter_sayisi === 2, 'Iki kriter saklandi');
 
 console.log('\n[13] G-11 · bos kriter seti reddedilir');
-const bos = await p.evaluate(async (base) => {
-  const r = await fetch(base + '/kriter', {
+const bos = await p.evaluate(async (a) => {
+  const r = await fetch(a.base + '/kriter', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...a.yetki },
     body: JSON.stringify({ ad: 'Boş', kriterler: [] }),
   });
   return { durum: r.status, govde: await r.json() };
-}, BASE);
+}, { base: BASE, yetki: YETKI });
 kontrol(bos.durum === 422, `Bos set reddedildi (HTTP ${bos.durum})`);
 kontrol((bos.govde.hata || '').includes('eşik'), 'Red gerekcesi esik yoklugu');
 
 console.log('\n[14] D9 (#13) · govde boyutu siniri');
-const buyuk = await p.evaluate(async (base) => {
+const buyuk = await p.evaluate(async (a) => {
   const kriter = { ad: 'F/K', anahtar: 'fk', operator: '<', esik: 1 };
-  const r = await fetch(base + '/kriter', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const r = await fetch(a.base + '/kriter', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...a.yetki },
     body: JSON.stringify({ ad: 'saldiri', kriterler: Array(200000).fill(kriter) }),
   });
   return r.status;
-}, BASE);
+}, { base: BASE, yetki: YETKI });
 kontrol(buyuk === 413, `12 MB govde reddedildi (HTTP ${buyuk})`);
 
-const cokKriter = await p.evaluate(async (base) => {
+const cokKriter = await p.evaluate(async (a) => {
   const kriter = { ad: 'F/K', anahtar: 'fk', operator: '<', esik: 1 };
-  const r = await fetch(base + '/kriter', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const r = await fetch(a.base + '/kriter', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...a.yetki },
     body: JSON.stringify({ ad: 'cok', kriterler: Array(51).fill(kriter) }),
   });
   return r.status;
-}, BASE);
+}, { base: BASE, yetki: YETKI });
 kontrol(cokKriter === 422, `51 kriter reddedildi (HTTP ${cokKriter})`);
 
-const kotuOp = await p.evaluate(async (base) => {
-  const r = await fetch(base + '/kriter', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+const kotuOp = await p.evaluate(async (a) => {
+  const r = await fetch(a.base + '/kriter', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...a.yetki },
     body: JSON.stringify({ ad: 'x', kriterler: [{ ad: 'F/K', anahtar: 'fk', operator: 'DROP', esik: 1 }] }),
   });
   return { durum: r.status, govde: await r.text() };
-}, BASE);
+}, { base: BASE, yetki: YETKI });
 kontrol(kotuOp.durum === 422 && !kotuOp.govde.includes('Bist\\'),
   'Gecersiz operator ic namespace sizdirmiyor');
 
 console.log('\n[15] D4 (#8) · metod ayrimi ve yol ifsasi');
 for (const m of ['PUT', 'DELETE', 'PATCH']) {
-  const d = await p.evaluate(async (a) => (await fetch(a.base + '/kriter', { method: a.m })).status,
-    { base: BASE, m });
+  const d = await p.evaluate(async (a) =>
+    (await fetch(a.base + '/kriter', { method: a.m, headers: a.yetki })).status,
+    { base: BASE, m, yetki: YETKI });
   kontrol(d === 405, `${m} -> 405 (once 200 + tam liste doniyordu)`);
 }
 
@@ -206,7 +211,27 @@ kontrol(satirSonu === 200, `?sirket=TTRAK%0A guvenli isleniyor (HTTP ${satirSonu
 
 await p.goto(BASE + '/', { waitUntil: 'networkidle' });
 
-console.log('\n[16] D5 (#9) · saglik denetimi DB\'ye gercekten dokunuyor');
+console.log('\n[16] D6 (#10) · yazma ucu erisim denetimi');
+const yetkisiz = await p.evaluate(async (base) => {
+  const r = await fetch(base + '/kriter', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad: 'x', kriterler: [{ ad: 'F/K', anahtar: 'fk', operator: '<', esik: 1 }] }),
+  });
+  return { durum: r.status, wwwAuth: r.headers.get('www-authenticate') };
+}, BASE);
+kontrol(yetkisiz.durum === 401, `tokensiz POST reddedildi (HTTP ${yetkisiz.durum})`);
+kontrol(yetkisiz.wwwAuth === 'Bearer', `WWW-Authenticate: Bearer (${yetkisiz.wwwAuth})`);
+
+const yetkisizOkuma = await p.evaluate(async (base) =>
+  (await fetch(base + '/kriter')).status, BASE);
+kontrol(yetkisizOkuma === 401, `tokensiz GET reddedildi (HTTP ${yetkisizOkuma})`);
+
+const yanlisToken = await p.evaluate(async (base) => (await fetch(base + '/kriter', {
+  headers: { Authorization: 'Bearer yanlis-token-yirmi-karakterden-uzun' },
+})).status, BASE);
+kontrol(yanlisToken === 401, `yanlis token reddedildi (HTTP ${yanlisToken})`);
+
+console.log('\n[17] D5 (#9) · saglik denetimi DB\'ye gercekten dokunuyor');
 const saglik = await p.evaluate(async (base) => {
   const r = await fetch(base + '/saglik');
   return { durum: r.status, cache: r.headers.get('cache-control'), govde: await r.json() };
@@ -215,7 +240,7 @@ kontrol(saglik.durum === 200, `saglikli DB -> 200 (HTTP ${saglik.durum})`);
 kontrol(saglik.govde.bilesenler?.db === 'ok', 'db bileseni raporlaniyor');
 kontrol(saglik.cache === 'no-store', `Cache-Control: no-store (${saglik.cache})`);
 
-console.log('\n[17] konsol temizligi');
+console.log('\n[18] konsol temizligi');
 kontrol(konsol.length === 0, `Konsol hatasi yok (${konsol.join(' | ') || 'temiz'})`);
 
 await b.close();

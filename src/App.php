@@ -12,6 +12,7 @@ use Bist\Domain\Kriter;
 use Bist\Domain\KriterSeti;
 use Bist\Domain\KriterTarama;
 use Bist\Domain\Operator;
+use Bist\Http\Yetki;
 use Bist\Render\Kokpit;
 use Bist\Render\KokpitRenderer;
 use InvalidArgumentException;
@@ -42,6 +43,7 @@ final class App
         private readonly VeriKaynagi $kaynak = new BosKaynak(),
         KriterDeposu|\Closure|null $depo = null,
         ?\Closure $depoSaglayici = null,
+        private readonly Yetki $yetki = new Yetki(null),
     ) {
         if ($depo instanceof KriterDeposu) {
             $this->depo = $depo;
@@ -70,8 +72,13 @@ final class App
      * @param array<string, mixed> $post
      * @return array{durum: int, tur: string, govde: string}
      */
-    public function calistir(string $yol, string $yontem = 'GET', array $get = [], array $post = []): array
-    {
+    public function calistir(
+        string $yol,
+        string $yontem = 'GET',
+        array $get = [],
+        array $post = [],
+        ?string $sunulanToken = null,
+    ): array {
         $yontem = strtoupper($yontem);
 
         if ($yol === '/saglik') {
@@ -84,11 +91,18 @@ final class App
 
         if ($yol === '/kriter') {
             // S5 (#15): metod ayrimi yoktu; PUT/DELETE/PATCH de 200 + tam liste donuyordu
-            return match ($yontem) {
-                'POST' => $this->kriterKaydet($post),
-                'GET', 'HEAD' => $this->kriterListe(),
-                default => $this->metodYok(['GET', 'HEAD', 'POST']),
-            };
+            if (!in_array($yontem, ['GET', 'HEAD', 'POST'], true)) {
+                return $this->metodYok(['GET', 'HEAD', 'POST']);
+            }
+
+            // D6 (#10): hem yazma hem OKUMA yetki ister. `gerekce` alani
+            // kullanicinin kendi yatirim niyetidir; anonim okunmamali.
+            $engel = $this->yetkiEngeli($sunulanToken);
+            if ($engel !== null) {
+                return $engel;
+            }
+
+            return $yontem === 'POST' ? $this->kriterKaydet($post) : $this->kriterListe();
         }
 
         return ['durum' => 404, 'tur' => 'text/html; charset=utf-8', 'govde' => $this->sayfa404()];
@@ -204,13 +218,46 @@ final class App
             return $this->json(['hata' => 'Kriter deposu şu anda kullanılamıyor.'], 503);
         }
 
-        return $this->json(['setler' => array_map(static fn ($k): array => [
+        $c = $this->json(['setler' => array_map(static fn ($k): array => [
             'id' => $k->id,
             'ad' => $k->ad,
             'gerekce' => $k->gerekce,
             'kriter_sayisi' => $k->seti->sayi(),
             'olusturma' => $k->olusturma,
         ], $depo->hepsi())]);
+        // Kullanicinin gerekce metni hassas; araya giren vekil onbellege almamali.
+        $c['basliklar'] = ['Cache-Control' => 'no-store'];
+
+        return $c;
+    }
+
+    /**
+     * Yetki denetimi. Gecerse null, gecmezse hazir cevap doner.
+     *
+     * @return array{durum: int, tur: string, govde: string, basliklar?: array<string,string>}|null
+     */
+    private function yetkiEngeli(?string $sunulanToken): ?array
+    {
+        if (!$this->yetki->yazmaAcik()) {
+            $c = $this->json([
+                'hata' => 'Bu kurulum salt okunur. Kriter uçları yapılandırılmadı.',
+            ], 403);
+            $c['basliklar'] = ['Cache-Control' => 'no-store'];
+
+            return $c;
+        }
+
+        if (!$this->yetki->dogrula($sunulanToken)) {
+            $c = $this->json(['hata' => 'Yetkilendirme gerekli.'], 401);
+            $c['basliklar'] = [
+                'WWW-Authenticate' => 'Bearer',
+                'Cache-Control' => 'no-store',
+            ];
+
+            return $c;
+        }
+
+        return null;
     }
 
     /**

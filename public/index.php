@@ -8,6 +8,7 @@ use Bist\Data\BosKaynak;
 use Bist\Data\KriterDeposu;
 use Bist\Http\GovdeHatasi;
 use Bist\Http\HataYakalayici;
+use Bist\Http\Yetki;
 use Bist\Http\GovdeOkuyucu;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -37,6 +38,8 @@ $app = new App(
 
         return new KriterDeposu($ayarlar->dbYolu);
     },
+    // D6 (#10): token yapilandirilmamissa yazma ve okuma KAPALI.
+    yetki: new Yetki($ayarlar->yazmaToken),
 );
 
 $yol = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -60,7 +63,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     }
 }
 
-$cevap = $app->calistir($yol, $_SERVER['REQUEST_METHOD'] ?? 'GET', $_GET, $govde);
+$cevap = $app->calistir(
+    $yol,
+    $_SERVER['REQUEST_METHOD'] ?? 'GET',
+    $_GET,
+    $govde,
+    Yetki::baslikta($_SERVER),
+);
 
 http_response_code($cevap['durum']);
 header('Content-Type: ' . $cevap['tur']);

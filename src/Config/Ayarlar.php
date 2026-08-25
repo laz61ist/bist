@@ -19,6 +19,7 @@ final readonly class Ayarlar
         public string $dbYolu,
         public Ortam $ortam,
         public int $azamiGovdeBayt,
+        public ?string $yazmaToken = null,
     ) {
     }
 
@@ -35,6 +36,8 @@ final readonly class Ayarlar
             ortam: Ortam::tryFrom(strtolower(self::metin($env, 'BIST_ENV') ?? ''))
                 ?? Ortam::PRODUCTION,
             azamiGovdeBayt: self::pozitifTamsayi($env, 'BIST_AZAMI_GOVDE_BAYT') ?? 65536,
+            // Yoksa yazma KAPALI kalir (D6 / #10) — guvenli varsayilan.
+            yazmaToken: self::metin($env, 'BIST_YAZMA_TOKEN'),
         );
     }
 
