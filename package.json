@@ -1,0 +1,14 @@
+{
+  "name": "bist-kokpit",
+  "version": "0.1.0",
+  "description": "BIST kokpit panosu E2E test paketi",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "e2e": "./tests/E2E/calistir.sh"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

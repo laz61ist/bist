@@ -19,10 +19,50 @@ use InvalidArgumentException;
 /** Kokpit uygulamasinin giris noktasi. */
 final class App
 {
+    /**
+     * Alan bazli sinirlar (D9 / #13).
+     *
+     * Govde boyutu sinirlansa bile 64 KB icine binlerce kisa kriter sigar.
+     * Bu yuzden alan sayisi ve uzunlugu AYRICA denetlenir. Uzunluklar
+     * karakter cinsindendir; Turkce karakterler UTF-8'de cok bayt tutar.
+     */
+    public const AZAMI_KRITER = 50;
+    public const AZAMI_AD = 120;
+    public const AZAMI_GEREKCE = 2000;
+
+    private ?KriterDeposu $depo = null;
+    private readonly ?\Closure $depoSaglayici;
+
+    /**
+     * @param KriterDeposu|\Closure(): KriterDeposu|null $depo
+     *        Kapanis verilirse depo TEMBEL kurulur: kokpit istegi DB'ye
+     *        hic dokunmaz (D4 / #8, K6).
+     */
     public function __construct(
         private readonly VeriKaynagi $kaynak = new BosKaynak(),
-        private readonly ?KriterDeposu $depo = null,
+        KriterDeposu|\Closure|null $depo = null,
+        ?\Closure $depoSaglayici = null,
     ) {
+        if ($depo instanceof KriterDeposu) {
+            $this->depo = $depo;
+            $this->depoSaglayici = null;
+        } else {
+            $this->depoSaglayici = $depoSaglayici ?? $depo;
+        }
+    }
+
+    /** Depoyu ilk ihtiyac aninda kurar; kuramazsa null doner. */
+    private function depo(): ?KriterDeposu
+    {
+        if ($this->depo !== null) {
+            return $this->depo;
+        }
+
+        if ($this->depoSaglayici === null) {
+            return null;
+        }
+
+        return $this->depo = ($this->depoSaglayici)();
     }
 
     /**
@@ -32,20 +72,38 @@ final class App
      */
     public function calistir(string $yol, string $yontem = 'GET', array $get = [], array $post = []): array
     {
-        return match (true) {
-            $yol === '/saglik' => $this->json(['durum' => 'ok', 'kaynak' => $this->kaynak->ad()]),
-            $yol === '/' || $yol === '/kokpit' => $this->kokpit($get),
-            $yol === '/kriter' && $yontem === 'POST' => $this->kriterKaydet($post),
-            $yol === '/kriter' => $this->kriterListe(),
-            default => ['durum' => 404, 'tur' => 'text/html; charset=utf-8', 'govde' => $this->sayfa404()],
-        };
+        $yontem = strtoupper($yontem);
+
+        if ($yol === '/saglik') {
+            return $this->saglik();
+        }
+
+        if ($yol === '/' || $yol === '/kokpit') {
+            return $this->kokpit($get);
+        }
+
+        if ($yol === '/kriter') {
+            // S5 (#15): metod ayrimi yoktu; PUT/DELETE/PATCH de 200 + tam liste donuyordu
+            return match ($yontem) {
+                'POST' => $this->kriterKaydet($post),
+                'GET', 'HEAD' => $this->kriterListe(),
+                default => $this->metodYok(['GET', 'HEAD', 'POST']),
+            };
+        }
+
+        return ['durum' => 404, 'tur' => 'text/html; charset=utf-8', 'govde' => $this->sayfa404()];
     }
 
     /** @param array<string, mixed> $get */
     private function kokpit(array $get): array
     {
-        $kod = strtoupper(trim((string) ($get['sirket'] ?? 'TTRAK')));
-        if (!preg_match('/^[A-Z0-9]{1,10}$/', $kod)) {
+        // Dizi girdi (?sirket[]=x) once uyari uretiyordu (#8); is_string ile eleniyor.
+        $ham = $get['sirket'] ?? null;
+        $kod = is_string($ham) ? strtoupper(trim($ham)) : 'TTRAK';
+
+        // \A ve \z kullaniliyor: PCRE'de $ sondaki tek \n'i eslesirdi (#15/S8),
+        // yani ?sirket=TTRAK%0A dogrulamayi geciyordu.
+        if (!preg_match('/\A[A-Z0-9]{1,10}\z/', $kod)) {
             $kod = 'TTRAK';
         }
 
@@ -68,26 +126,71 @@ final class App
     /** @param array<string, mixed> $post */
     private function kriterKaydet(array $post): array
     {
-        if ($this->depo === null) {
-            return $this->json(['hata' => 'Kriter deposu yapılandırılmadı.'], 503);
+        $depo = $this->depoGuvenli();
+        if ($depo === null) {
+            return $this->json(['hata' => 'Kriter deposu şu anda kullanılamıyor.'], 503);
         }
 
         $ad = trim((string) ($post['ad'] ?? ''));
         $gerekce = trim((string) ($post['gerekce'] ?? ''));
         $ham = $post['kriterler'] ?? [];
+        $ham = is_array($ham) ? $ham : [];
+
+        if (mb_strlen($ad, 'UTF-8') > self::AZAMI_AD) {
+            return $this->json([
+                'hata' => sprintf('ad en fazla %d karakter olabilir.', self::AZAMI_AD),
+            ], 422);
+        }
+
+        if (mb_strlen($gerekce, 'UTF-8') > self::AZAMI_GEREKCE) {
+            return $this->json([
+                'hata' => sprintf('gerekce en fazla %d karakter olabilir.', self::AZAMI_GEREKCE),
+            ], 422);
+        }
+
+        if (count($ham) > self::AZAMI_KRITER) {
+            return $this->json([
+                'hata' => sprintf('En fazla %d kriter kabul edilir.', self::AZAMI_KRITER),
+            ], 422);
+        }
+
+        $kriterler = [];
+        foreach ($ham as $k) {
+            $kriterAdi = (string) ($k['ad'] ?? '');
+
+            if (mb_strlen($kriterAdi, 'UTF-8') > self::AZAMI_AD) {
+                return $this->json([
+                    'hata' => sprintf('Kriter adı en fazla %d karakter olabilir.', self::AZAMI_AD),
+                ], 422);
+            }
+
+            $operator = Operator::tryFrom((string) ($k['operator'] ?? '<'));
+            if ($operator === null) {
+                // Istisna mesajini oldugu gibi dondurmek ic namespace'i sizdirir (#15/S4).
+                return $this->json([
+                    'hata' => 'operator geçersiz.',
+                    'kabul_edilen' => array_map(
+                        static fn (Operator $o): string => $o->value,
+                        Operator::cases(),
+                    ),
+                ], 422);
+            }
+
+            $kriterler[] = new Kriter(
+                $kriterAdi,
+                (string) ($k['anahtar'] ?? ''),
+                $operator,
+                (float) ($k['esik'] ?? 0),
+            );
+        }
 
         try {
-            $kriterler = [];
-            foreach (is_array($ham) ? $ham : [] as $k) {
-                $kriterler[] = new Kriter(
-                    (string) ($k['ad'] ?? ''),
-                    (string) ($k['anahtar'] ?? ''),
-                    Operator::from((string) ($k['operator'] ?? '<')),
-                    (float) ($k['esik'] ?? 0),
-                );
-            }
-            $id = $this->depo->kaydet($ad === '' ? 'Adsız set' : $ad, new KriterSeti($kriterler), $gerekce);
-        } catch (InvalidArgumentException | \ValueError $e) {
+            $id = $depo->kaydet(
+                $ad === '' ? 'Adsız set' : $ad,
+                new KriterSeti($kriterler),
+                $gerekce,
+            );
+        } catch (InvalidArgumentException $e) {
             return $this->json(['hata' => $e->getMessage()], 422);
         }
 
@@ -96,8 +199,9 @@ final class App
 
     private function kriterListe(): array
     {
-        if ($this->depo === null) {
-            return $this->json(['setler' => []]);
+        $depo = $this->depoGuvenli();
+        if ($depo === null) {
+            return $this->json(['hata' => 'Kriter deposu şu anda kullanılamıyor.'], 503);
         }
 
         return $this->json(['setler' => array_map(static fn ($k): array => [
@@ -106,7 +210,63 @@ final class App
             'gerekce' => $k->gerekce,
             'kriter_sayisi' => $k->seti->sayi(),
             'olusturma' => $k->olusturma,
-        ], $this->depo->hepsi())]);
+        ], $depo->hepsi())]);
+    }
+
+    /**
+     * Depoyu kurar; kurulamazsa null doner. Istisna disari sizmaz —
+     * cagiran 503 uretir, kullanici PDOException gormez (D4 / #8).
+     */
+    private function depoGuvenli(): ?KriterDeposu
+    {
+        try {
+            return $this->depo();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /** @param list<string> $izinli */
+    private function metodYok(array $izinli): array
+    {
+        return [
+            'durum' => 405,
+            'tur' => 'application/json; charset=utf-8',
+            'govde' => json_encode(
+                ['hata' => 'Bu yol için metod desteklenmiyor.', 'izinli' => $izinli],
+                JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+            ),
+            'basliklar' => ['Allow' => implode(', ', $izinli)],
+        ];
+    }
+
+    /**
+     * Saglik denetimi.
+     *
+     * D5 (#9): Onceden sabit bir dize donuyordu; sqlite bozulsa, volume
+     * baglanmasa, disk dolsa bile 200 {"durum":"ok"} veriyordu. Yuk
+     * dengeleyici hasta instance'a trafik gondermeye devam ediyordu.
+     *
+     * Simdi DB'ye ucuz ama GERCEK bir sorgu atar. Bozuksa 503 doner ki
+     * platform instance'i trafikten cikarsin.
+     */
+    private function saglik(): array
+    {
+        $depo = $this->depoGuvenli();
+        $dbIyi = $depo?->calisiyorMu() ?? false;
+
+        $cevap = $this->json([
+            'durum' => $dbIyi ? 'ok' : 'bozuk',
+            'bilesenler' => [
+                'db' => $dbIyi ? 'ok' : 'erişilemiyor',
+                'kaynak' => $this->kaynak->ad(),
+            ],
+        ], $dbIyi ? 200 : 503);
+
+        // Saglik yaniti asla onbelleklenmemeli; bayat "ok" en kotusudur.
+        $cevap['basliklar'] = ['Cache-Control' => 'no-store'];
+
+        return $cevap;
     }
 
     /** @param array<string, mixed> $veri */
