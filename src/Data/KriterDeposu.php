@@ -47,6 +47,21 @@ final class KriterDeposu
             SQL);
     }
 
+    /**
+     * Baglantinin gercekten calistigini dogrular.
+     *
+     * D5 (#9): /saglik onceden hicbir seye dokunmuyordu. Bu sorgu ucuzdur
+     * ama gercektir: dosya acilabiliyor ve okunabiliyor mu.
+     */
+    public function calisiyorMu(): bool
+    {
+        try {
+            return $this->pdo->query('SELECT 1')?->fetchColumn() !== false;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     public function kaydet(string $ad, KriterSeti $seti, string $gerekce = ''): int
     {
         $kriterler = array_map(static fn (Kriter $k): array => [

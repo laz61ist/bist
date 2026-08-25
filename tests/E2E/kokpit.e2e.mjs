@@ -206,7 +206,16 @@ kontrol(satirSonu === 200, `?sirket=TTRAK%0A guvenli isleniyor (HTTP ${satirSonu
 
 await p.goto(BASE + '/', { waitUntil: 'networkidle' });
 
-console.log('\n[16] konsol temizligi');
+console.log('\n[16] D5 (#9) · saglik denetimi DB\'ye gercekten dokunuyor');
+const saglik = await p.evaluate(async (base) => {
+  const r = await fetch(base + '/saglik');
+  return { durum: r.status, cache: r.headers.get('cache-control'), govde: await r.json() };
+}, BASE);
+kontrol(saglik.durum === 200, `saglikli DB -> 200 (HTTP ${saglik.durum})`);
+kontrol(saglik.govde.bilesenler?.db === 'ok', 'db bileseni raporlaniyor');
+kontrol(saglik.cache === 'no-store', `Cache-Control: no-store (${saglik.cache})`);
+
+console.log('\n[17] konsol temizligi');
 kontrol(konsol.length === 0, `Konsol hatasi yok (${konsol.join(' | ') || 'temiz'})`);
 
 await b.close();

@@ -240,10 +240,33 @@ final class App
         ];
     }
 
-    /** Saglik denetimi (D5 / #9 icinde gerceklestirilecek). */
+    /**
+     * Saglik denetimi.
+     *
+     * D5 (#9): Onceden sabit bir dize donuyordu; sqlite bozulsa, volume
+     * baglanmasa, disk dolsa bile 200 {"durum":"ok"} veriyordu. Yuk
+     * dengeleyici hasta instance'a trafik gondermeye devam ediyordu.
+     *
+     * Simdi DB'ye ucuz ama GERCEK bir sorgu atar. Bozuksa 503 doner ki
+     * platform instance'i trafikten cikarsin.
+     */
     private function saglik(): array
     {
-        return $this->json(['durum' => 'ok', 'kaynak' => $this->kaynak->ad()]);
+        $depo = $this->depoGuvenli();
+        $dbIyi = $depo?->calisiyorMu() ?? false;
+
+        $cevap = $this->json([
+            'durum' => $dbIyi ? 'ok' : 'bozuk',
+            'bilesenler' => [
+                'db' => $dbIyi ? 'ok' : 'erişilemiyor',
+                'kaynak' => $this->kaynak->ad(),
+            ],
+        ], $dbIyi ? 200 : 503);
+
+        // Saglik yaniti asla onbelleklenmemeli; bayat "ok" en kotusudur.
+        $cevap['basliklar'] = ['Cache-Control' => 'no-store'];
+
+        return $cevap;
     }
 
     /** @param array<string, mixed> $veri */
