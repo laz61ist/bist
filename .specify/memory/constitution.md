@@ -1,50 +1,103 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# BIST Kokpit Anayasası
 
-## Core Principles
+**Sürüm:** 1.0.0 · **Yürürlük:** 2026-08-25 · **Son değişiklik:** 2026-08-25
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+Bu belge projenin pazarlık edilemez kurallarını tanımlar. Çelişki halinde
+anayasa kazanır. Kural eklemek için commit gerekir; sözlü mutabakat yetmez.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+## I. Kaynaksız rakam yoktur (PAZARLIK EDİLEMEZ)
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+Kaynağı ve dönemi olmayan hiçbir sayı üretilmez, gösterilmez, saklanmaz.
+Bu bir doğrulama adımı değil, **tip sistemi kısıtıdır**: `Metrik` yapıcısı
+kaynaksız veya dönemsiz değer verildiğinde istisna atar. Nesne kurulamaz.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+Bulunamayan veri `—` ile gösterilir, altında nedeni ve kullanıcının
+yapabileceği eylem yazar. Rapor doldurmak için sayı üretilmez.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+**İhlal testi:** `MetrikTest::testDegerVarkenKaynakYoksaMetrikKurulamaz`
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## II. Yatırım tavsiyesi üretilmez (PAZARLIK EDİLEMEZ)
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+Al, sat, tut, hedef fiyat yok. "Ucuz", "pahalı", "cazip", "fırsat",
+"en iyi" gibi niteleyici sıfat yok. Sıralanmış "en iyi N" listesi yok.
+Sistem konum bildirir, hüküm vermez.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Türkiye'de yatırım danışmanlığı SPK izni gerektirir. Bu kural hukuki
+zorunluluktur, üslup tercihi değil.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+Sistem kullanıcının kişisel finansal koşullarını (gelir, risk toleransı,
+yaş, vade) **toplamaz**. Toplamamak bir gizlilik tercihi değil, uyum
+kontrolüdür: toplanan veri, kişiselleştirilmiş tavsiye eşiğine yaklaştırır.
 
-## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+**İhlal testi:** `KriterTaramaTest::testOzetTavsiyeIfadesiIcermez`,
+E2E adım 8
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+## III. Eşiği kullanıcı koyar
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+Sistem kendi eşiğini üretmez, önermez, varsayılan koymaz. Eşik yoksa
+tarama çalışmaz. Kullanıcının eşiğiyle birlikte **kendi gerekçesi** de
+saklanır; çıktının sahibi kullanıcıdır.
+
+**İhlal testi:** `KriterTaramaTest::testBosKriterSetiKurulamaz`
+
+## IV. Hesaplayamıyorsan hesaplama
+
+Şüpheli girdide sayı üretmek, sayı üretmemekten kötüdür. Yanlış sayı
+makul görünür ve yanlış olduğu çıktıdan anlaşılmaz.
+
+Kapalı kapılar:
+- İki dönemin TMS 29 düzeltme durumu farklıysa büyüme oranı hesaplanmaz
+- Değer işaret değiştirdiyse yüzde değişim üretilmez, mutlak fark döner
+- Payda sıfır veya negatifse oran tanımsızdır
+- Veri eksikse "geçti/kaldı" denmez, "değerlendirilemedi" denir
+
+Boş bırakma **tiplidir**; her tipin ayrı kullanıcı eylemi vardır.
+
+**İhlal testi:** `Tms29KontrolTest`, `OranTest`
+
+## V. Test önce yazılır (PAZARLIK EDİLEMEZ)
+
+Üretim kodu, kendisini gerektiren başarısız bir test olmadan yazılmaz.
+Kırmızıyı görmeden yeşile geçilmez. Test hata (error) değil başarısızlık
+(failure) vermelidir; hata alınırsa önce hata giderilir.
+
+"Bu sefer atlayayım" düşüncesi ihlaldir. Kod önce yazıldıysa silinir,
+testten yeniden yazılır.
+
+## VI. Kural uydurulmaz, kaynağından okunur
+
+Alan kuralları (TMS 29 karar tablosu, tarama disiplini, etiket sistemi)
+tahminle yazılmaz. `.claude/skills/` altındaki skill dosyalarından ve
+`docs/REHBER-SAYFA-HARITASI.md`'deki numaralı gereksinimlerden okunur.
+Her sınıf hangi gereksinimi taşıdığını doc-block'unda yazar.
+
+## VII. Doğrulanmamış bilgi işaretlenir
+
+Kaynak, DOI, madde numarası, sürüm, fiyat uydurulmaz. Emin olunmayan
+her şey `[DOĞRULANMASI GEREKİYOR]` taşır. Özet okumak tam okumak
+sayılmaz. Erişilemeyen kaynak "erişilemedi" diye raporlanır.
+
+## VIII. Mevcut çalışan koda dokunulmaz
+
+Yeni eklenen şey mevcut isimlendirme ve katman organizasyonuna uyar.
+Teorik olarak daha iyi bir çözüm varsa bile mevcut kalıp korunur.
+Refactor ancak testler yeşilken ve davranış değişmeden yapılır.
+
+## IX. Sır repoya girmez
+
+API anahtarı, veritabanı şifresi, token, webhook adresi koda, teste,
+workflow'a veya commit mesajına yazılmaz. Yapılandırma ortam
+değişkeninden okunur; kod değeri bilmez.
+
+## X. Kanıtsız "tamam" denmez
+
+Bir işin bittiği, testin geçtiği veya hatanın düzeldiği, o oturumda
+alınmış bir komut çıktısına dayanmadan bildirilmez. Test düştüyse
+çıktısı gösterilir. Atlanan adım varsa açıkça söylenir.
+
+## Yönetişim
+
+- Anayasa değişikliği commit gerektirir; mesajda gerekçe bulunur
+- Davranış bozan değişiklik `BREAKING:` ön ekiyle işaretlenir
+- Her PR bu maddelere karşı denetlenir; ihlal varsa gerekçesi PR'da yazılır
+- Madde I, II ve V ihlali PR'ı bloke eder
