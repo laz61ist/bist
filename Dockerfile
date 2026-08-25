@@ -9,6 +9,11 @@
 FROM composer:2 AS bagimliliklar
 WORKDIR /derleme
 COPY composer.json composer.lock ./
+# src/ BURADA gerekli: --classmap-authoritative PSR-4 geri donusunu KAPATIR,
+# dolayisiyla sinif haritasi uretilirken kaynak dosyalar ortada olmali.
+# Ilk denemede bu satir yoktu ve konteyner su hatayla 500 donuyordu:
+#   Class "Bist\Config\Ayarlar" not found in /uygulama/public/index.php:16
+COPY src/ ./src/
 # --no-dev: uretimde tek require-dev PHPUnit, imaja girmesin
 # --no-scripts: paket script'leri derleme aninda calismasin (#14 ile ayni gerekce)
 RUN composer install \
@@ -77,6 +82,26 @@ COPY --from=bagimliliklar /derleme/vendor ./vendor
 COPY composer.json composer.lock ./
 COPY public/ ./public/
 COPY src/ ./src/
+
+# Otomatik yukleyicinin uygulama siniflarini GERCEKTEN cozdugunu dogrula.
+# Sinif haritasi eksik olsaydi konteyner ilk istekte 500 donerdi; burada
+# patlamasi yeglenir.
+RUN set -eux; \
+    php -r ' \
+      require "/uygulama/vendor/autoload.php"; \
+      foreach ([ \
+        "Bist\\Config\\Ayarlar", \
+        "Bist\\App", \
+        "Bist\\Http\\Yetki", \
+        "Bist\\Http\\GovdeOkuyucu", \
+        "Bist\\Http\\HataYakalayici", \
+        "Bist\\Data\\KriterDeposu", \
+        "Bist\\Render\\KokpitRenderer", \
+      ] as $c) { \
+        if (!class_exists($c)) { fwrite(STDERR, "EKSIK: $c\n"); exit(1); } \
+      } \
+      echo "otomatik yukleyici tamam\n"; \
+    '
 
 # Kalici veri buraya baglanir. Volume BAGLANMAZSA veri her yeniden
 # baslatmada kaybolur (#7) — README'de yaziyor.
