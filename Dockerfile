@@ -22,10 +22,27 @@ RUN composer install \
 # --- 2. asama: calisma ---
 FROM php:8.3-apache
 
-# pdo_sqlite ve mbstring: CI'da kurulan ayni ikili
-RUN docker-php-ext-install -j"$(nproc)" pdo_sqlite \
-    && a2enmod rewrite \
-    && rm -rf /var/lib/apt/lists/*
+# pdo_sqlite derlemek icin sqlite3 GELISTIRME BASLIKLARI gerekir; resmi
+# php imajinda yok. Ilk denemede build tam bu satirda dustu:
+#   "Package requirements (sqlite3 >= 3.7.7) were not met"
+# Calisma zamani kutuphanesi (libsqlite3-0) imajda zaten var; -dev
+# paketi derlemeden sonra kaldiriliyor.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libsqlite3-dev; \
+    docker-php-ext-install -j"$(nproc)" pdo_sqlite; \
+    apt-get purge -y --auto-remove libsqlite3-dev; \
+    a2enmod rewrite; \
+    rm -rf /var/lib/apt/lists/*
+
+# Uzantilarin GERCEKTEN yuklendigini derleme aninda dogrula.
+# mbstring resmi imajda gomulu geliyor ama VARSAYMIYORUZ — bir onceki
+# turda yorum "pdo_sqlite ve mbstring" diyordu, kod yalnizca birini
+# kuruyordu. Eksikse imaj burada patlar, uretimde degil.
+RUN set -eux; \
+    php -m | grep -qx 'pdo_sqlite'; \
+    php -m | grep -qx 'mbstring'; \
+    php -r 'new PDO("sqlite::memory:"); echo "pdo_sqlite calisiyor\n";'
 
 # Uretim php.ini — hata ayrintisi kullaniciya gitmez, log'a gider (#8)
 RUN { \
