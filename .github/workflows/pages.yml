@@ -3,6 +3,9 @@ name: Pages
 on:
   push:
     branches: [main]
+  # Testler merge ONCESI kosmali; aksi halde kapi degil, tutanaktir.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 # D10 (#14): Izinler workflow duzeyinde tanimliydi ve test job'ina miras
@@ -93,6 +96,8 @@ jobs:
   build:
     name: Site kur
     needs: [test, e2e]
+    # Yayin yalnizca main'den; PR'da test ve e2e kosar, deploy kosmaz.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -115,6 +120,7 @@ jobs:
   deploy:
     name: Yayinla
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pages: write
