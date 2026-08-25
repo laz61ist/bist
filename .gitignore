@@ -6,3 +6,4 @@ incoming/*
 !incoming/.gitkeep
 .server.pid
 server.log
+_site/

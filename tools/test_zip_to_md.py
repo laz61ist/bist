@@ -4,7 +4,7 @@ import sys, zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from zip_to_md import decode_name, is_safe  # noqa: E402
+from zip_to_md import decode_name, is_safe, resolve_target  # noqa: E402
 
 
 def zi(name: str, utf8_flag: bool) -> zipfile.ZipInfo:
@@ -38,6 +38,30 @@ def main() -> int:
     for good in ("a.md", "alt/b.md", "a/b/c.md"):
         if not is_safe(Path(good)):
             fails.append(f"is_safe: {good!r} reddedildi (kabul edilmeliydi)")
+
+    # Ayni isim + AYNI icerik -> atla (kopya uretme)
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        (d / "a.md").write_text("ayni icerik", encoding="utf-8")
+        got = resolve_target(d / "a.md", b"ayni icerik", overwrite=False)
+        if got is not None:
+            fails.append(f"resolve_target: ayni icerik atlanmaliydi, {got!r} dondu")
+
+        # Ayni isim + FARKLI icerik -> yeni ad uret
+        got = resolve_target(d / "a.md", b"baska icerik", overwrite=False)
+        if got != d / "a-2.md":
+            fails.append(f"resolve_target: farkli icerikte a-2.md beklenirdi, {got!r} dondu")
+
+        # Dosya yoksa kendi yolunu dondur
+        got = resolve_target(d / "yeni.md", b"x", overwrite=False)
+        if got != d / "yeni.md":
+            fails.append(f"resolve_target: yeni dosyada kendi yolu beklenirdi, {got!r} dondu")
+
+        # overwrite=True -> ayni yolu dondur
+        got = resolve_target(d / "a.md", b"baska icerik", overwrite=True)
+        if got != d / "a.md":
+            fails.append(f"resolve_target: overwrite'ta ayni yol beklenirdi, {got!r} dondu")
 
     if fails:
         print("BASARISIZ:")

@@ -55,8 +55,24 @@ def unique_path(path: Path) -> Path:
         n += 1
 
 
+
+def resolve_target(path: Path, data: bytes, overwrite: bool) -> Path | None:
+    """Yazilacak nihai yolu dondur; ayni icerik zaten varsa None dondur.
+
+    - dosya yoksa            -> path
+    - overwrite              -> path
+    - ayni isim, ayni icerik -> None (atla, kopya uretme)
+    - ayni isim, farkli icerik -> path-2.md, path-3.md ...
+    """
+    if overwrite or not path.exists():
+        return path
+    if path.read_bytes() == data:
+        return None
+    return unique_path(path)
+
 def extract(zip_path: Path, dest: Path, flat: bool, overwrite: bool) -> list[Path]:
     written: list[Path] = []
+    skipped: list[Path] = []
     with zipfile.ZipFile(zip_path) as zf:
         for info in zf.infolist():
             if info.is_dir():
@@ -69,17 +85,21 @@ def extract(zip_path: Path, dest: Path, flat: bool, overwrite: bool) -> list[Pat
                 print(f"  ATLANDI (guvensiz yol): {name}", file=sys.stderr)
                 continue
             target = dest / (rel.name if flat else rel)
+            target.parent.mkdir(parents=True, exist_ok=True)
             resolved = target.resolve()
             if not str(resolved).startswith(str(dest.resolve())):
                 print(f"  ATLANDI (dest disi): {name}", file=sys.stderr)
                 continue
-            if not overwrite:
-                target = unique_path(target)
-            target.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(info) as src:
                 data = src.read()
-            target.write_bytes(data)
-            written.append(target)
+            final = resolve_target(target, data, overwrite)
+            if final is None:
+                skipped.append(target)
+                print(f"  = ATLANDI (ayni icerik zaten var): {target.name}")
+                continue
+            final.parent.mkdir(parents=True, exist_ok=True)
+            final.write_bytes(data)
+            written.append(final)
     return written
 
 
@@ -116,11 +136,13 @@ def main() -> int:
         dest = dest if dest.is_absolute() else REPO / dest
         dest.mkdir(parents=True, exist_ok=True)
         print(f"\n{zp.name} -> {dest.relative_to(REPO)}")
+        before = sum(1 for _ in dest.rglob("*") if _.is_file())
         written = extract(zp, dest, args.flat, args.overwrite)
+        skipped_any = before > 0
         for w in written:
             print(f"  + {w.relative_to(REPO)}")
         if not written:
-            print("  (md dosyasi bulunamadi)")
+            print("  (yeni md dosyasi yok)" if skipped_any else "  (md dosyasi bulunamadi)")
         total += written
 
     print(f"\nToplam {len(total)} markdown dosyasi cikarildi.")
