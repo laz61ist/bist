@@ -155,6 +155,36 @@ final class Tms29KontrolTest extends TestCase
         self::assertStringContainsString('tanımsız', $k->aciklama());
     }
 
+    /**
+     * Kaynak: TR literatur taramasi bulgusu — TMS 29 duzeltmesi sonrasi
+     * FAVOK gibi kalemler pozitiften negatife donebiliyor. Bu durumda
+     * yuzde degisim matematiksel olarak hesaplanir ama yaniltici olur
+     * ("%-150 buyume" ifadesi anlamsizdir). Mutlak fark + uyari dondurulur.
+     */
+    public function testIsaretDegisimindeYuzdeDegisimUretilmez(): void
+    {
+        $k = Tms29Kontrol::karsilastir(
+            $this->metrik(100.0, '2022/12', Tms29Durum::DUZELTILMIS),
+            $this->metrik(-50.0, '2024/12', Tms29Durum::DUZELTILMIS),
+        );
+
+        self::assertFalse($k->hesaplanabilir());
+        self::assertNull($k->buyumeOrani());
+        self::assertStringContainsString('işaret değiştirdi', $k->aciklama());
+        self::assertEqualsWithDelta(-150.0, $k->mutlakFark(), 0.0001);
+    }
+
+    public function testIsaretDegismiyorsaNormalHesaplanir(): void
+    {
+        $k = Tms29Kontrol::karsilastir(
+            $this->metrik(100.0, '2022/12', Tms29Durum::DUZELTILMIS),
+            $this->metrik(40.0, '2024/12', Tms29Durum::DUZELTILMIS),
+        );
+
+        self::assertTrue($k->hesaplanabilir());
+        self::assertEqualsWithDelta(-60.0, $k->buyumeOrani(), 0.0001);
+    }
+
     public function testDegerYoksaKarsilastirmaYapilmaz(): void
     {
         $eksik = new Metrik(ad: 'Net satış', neDemek: 'Açıklama.', eksikNedeni: 'Kaynak yok.');

@@ -55,7 +55,29 @@ final class Tms29Kontrol
             );
         }
 
-        $buyume = (((float) $yeni->deger) - $taban) / $taban * 100.0;
+        $yeniDeger = (float) $yeni->deger;
+
+        // Isaret degisimi: taban pozitif, yeni deger negatif. Yuzde degisim
+        // matematiksel olarak hesaplanir ama "%-150 buyume" ifadesi anlamsizdir.
+        // TMS 29 duzeltmesi sonrasi FAVOK gibi kalemler bu duruma girebiliyor.
+        if ($yeniDeger < 0.0) {
+            return new Karsilastirma(
+                sonuc: $sonuc,
+                buyumeYuzdesi: null,
+                aciklama: sprintf(
+                    'Değer işaret değiştirdi (%s → %s). Yüzde değişim yanıltıcı olacağı için '
+                    . 'üretilmedi; mutlak fark %s.',
+                    number_format($taban, 2, ',', '.'),
+                    number_format($yeniDeger, 2, ',', '.'),
+                    number_format($yeniDeger - $taban, 2, ',', '.'),
+                ),
+                eskiDonem: $eski->donem,
+                yeniDonem: $yeni->donem,
+                mutlakFark: $yeniDeger - $taban,
+            );
+        }
+
+        $buyume = ($yeniDeger - $taban) / $taban * 100.0;
 
         return new Karsilastirma(
             sonuc: $sonuc,

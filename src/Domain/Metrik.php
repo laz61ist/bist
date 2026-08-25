@@ -34,6 +34,7 @@ final readonly class Metrik
         public ?string $kaynak = null,
         public ?Tms29Durum $tms29 = null,
         private ?string $eksikNedeni = null,
+        private ?EksiklikNedeni $nedenTipi = null,
         array $elleEklenen = [],
     ) {
         if (trim($this->neDemek) === '') {
@@ -72,6 +73,12 @@ final readonly class Metrik
         return $this->eksikNedeni;
     }
 
+    /** Eksikligin tipi; arayuz buna gore somut eylem onerir. */
+    public function nedenTipi(): ?EksiklikNedeni
+    {
+        return $this->nedenTipi;
+    }
+
     /** Yeni etiketli kopya dondurur; bu ornek degismez. */
     public function etiketle(Etiket $etiket): self
     {
@@ -88,6 +95,7 @@ final readonly class Metrik
             kaynak: $this->kaynak,
             tms29: $this->tms29,
             eksikNedeni: $this->eksikNedeni,
+            nedenTipi: $this->nedenTipi,
             elleEklenen: [...$this->elleEklenen, $etiket],
         );
     }

@@ -10,3 +10,5 @@ _site/
 vendor/
 
 .phpunit.cache/
+var/
+.php.pid

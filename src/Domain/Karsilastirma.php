@@ -19,7 +19,17 @@ final readonly class Karsilastirma
         public ?string $eskiDonem = null,
         public ?string $yeniDonem = null,
         public ?string $kaynak = null,
+        private ?float $mutlakFark = null,
     ) {
+    }
+
+    /**
+     * Yuzde degisim uretilemedigi durumlarda mutlak fark; yoksa null.
+     * Isaret degisimi gibi durumlarda kullaniciya yine de bir buyukluk sunar.
+     */
+    public function mutlakFark(): ?float
+    {
+        return $this->mutlakFark;
     }
 
     public function aciklama(): string
@@ -60,7 +70,16 @@ final readonly class Karsilastirma
     public function metrik(string $ad, string $neDemek): Metrik
     {
         if (!$this->hesaplanabilir()) {
-            return new Metrik(ad: $ad, neDemek: $neDemek, eksikNedeni: $this->aciklama);
+            return new Metrik(
+                ad: $ad,
+                neDemek: $neDemek,
+                eksikNedeni: $this->aciklama,
+                nedenTipi: match ($this->sonuc) {
+                    KarsilastirmaSonucu::KARSILASTIRILAMAZ => EksiklikNedeni::KARSILASTIRILAMAZ,
+                    KarsilastirmaSonucu::VERI_YOK => EksiklikNedeni::KAYNAK_YOK,
+                    default => EksiklikNedeni::HESAPLANAMAZ,
+                },
+            );
         }
 
         $m = new Metrik(
