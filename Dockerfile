@@ -71,6 +71,13 @@ RUN sed -ri 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
       '  AllowOverride None' \
       '  Require all granted' \
       '  FallbackResource /index.php' \
+      '  # Apache 2.4 Authorization basligini alt-surec ortamina VARSAYILAN' \
+      '  # OLARAK AKTARMAZ (util_script.c, ap_add_common_vars). Bu satir' \
+      '  # olmadan Bearer token PHP tarafina hic ulasmaz ve dogru tokenla' \
+      '  # yapilan yazma 401 doner — CI kosusu #9 tam bunu yakaladi.' \
+      '  # php -S basligi geciriyor, bu yuzden yerel testler yesildi;' \
+      '  # hata yalnizca imaj icinde gorunuyordu.' \
+      '  CGIPassAuth On' \
       '</Directory>' \
       'ServerTokens Prod' \
       'ServerSignature Off' \

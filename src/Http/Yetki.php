@@ -52,11 +52,28 @@ final readonly class Yetki
     /**
      * Authorization: Bearer <token> basligindan sirri cikarir.
      *
+     * REDIRECT_ onekli anahtar da okunur. Apache 2.4 Authorization
+     * basligini alt-surec ortamina kendiliginden AKTARMAZ
+     * (util_script.c, ap_add_common_vars: CGIPassAuth kapaliysa baslik
+     * dusurulur). Kurulumlar bunu ya CGIPassAuth On ile ya da
+     *   SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+     * ile asar; ikinci yolda FallbackResource/mod_rewrite ic
+     * yonlendirmesi degiskene REDIRECT_ oneki ekler.
+     *
+     * Guvenlik notu: REDIRECT_HTTP_AUTHORIZATION istemci tarafindan
+     * dogrudan doldurulamaz — istemcinin gonderdigi bir baslik
+     * $_SERVER'a HTTP_ onekiyle girer, REDIRECT_ onekini yalnizca
+     * sunucunun ic yonlendirmesi koyar.
+     *
      * @param array<string, mixed> $server
      */
     public static function baslikta(array $server): ?string
     {
-        $ham = trim((string) ($server['HTTP_AUTHORIZATION'] ?? ''));
+        $ham = trim((string) (
+            $server['HTTP_AUTHORIZATION']
+            ?? $server['REDIRECT_HTTP_AUTHORIZATION']
+            ?? ''
+        ));
 
         if (!preg_match('/\Abearer\s+(\S+)\z/i', $ham, $m)) {
             return null;

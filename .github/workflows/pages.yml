@@ -169,7 +169,18 @@ jobs:
             -H 'Content-Type: application/json' -H "Authorization: Bearer $TOK" \
             -d '{"ad":"Kalici set","gerekce":"Yeniden baslatmayi asmali","kriterler":[{"ad":"F/K","anahtar":"fk","operator":"<","esik":12}]}' \
             http://127.0.0.1:8301/kriter)
-          test "$kod" = "201" || { echo "yazma basarisiz: $kod"; docker logs bist-rw; exit 1; }
+          if [ "$kod" != "201" ]; then
+            echo "yazma basarisiz: $kod"
+            if [ "$kod" = "401" ]; then
+              echo "TANI: token dogru oldugu halde 401 — Authorization basligi"
+              echo "      PHP'ye ulasmiyor olabilir. Apache 2.4 bu basligi"
+              echo "      CGIPassAuth On verilmedikce alt-surec ortamina"
+              echo "      aktarmaz. Dockerfile'daki bist.conf'u kontrol et."
+              docker exec bist-rw grep -n CGIPassAuth /etc/apache2/conf-available/bist.conf || echo "      CGIPassAuth satiri YOK"
+            fi
+            docker logs bist-rw
+            exit 1
+          fi
 
           echo "--- K2: konteyneri YENIDEN OLUSTUR, veri durmali ---"
           docker rm -f bist-rw

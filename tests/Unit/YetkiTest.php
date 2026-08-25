@@ -103,6 +103,30 @@ final class YetkiTest extends TestCase
         self::assertNull(Yetki::baslikta(['HTTP_AUTHORIZATION' => 'Bearer']));
     }
 
+    /**
+     * Apache 2.4, Authorization basligini CGI/alt-surec ortamina
+     * AKTARMAZ (util_script.c, ap_add_common_vars): CGIPassAuth On
+     * verilmedikce baslik dusurulur. Bazi kurulumlar bunu
+     *   SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+     * ile asar; FallbackResource/mod_rewrite ic yonlendirmesi devredeyse
+     * degisken PHP'ye REDIRECT_ onekiyle ulasir.
+     *
+     * Bu, uydurma bir senaryo degil: CI #9'da konteyner dogru tokenla
+     * 401 dondu, cunku php -S basligi geciriyor, Apache gecirmiyordu.
+     */
+    public function testApacheRedirectOnekliBaslikDaOkunur(): void
+    {
+        self::assertSame('abc', Yetki::baslikta(['REDIRECT_HTTP_AUTHORIZATION' => 'Bearer abc']));
+    }
+
+    public function testDogrudanBaslikRedirectOneklininOnundedir(): void
+    {
+        self::assertSame('gercek', Yetki::baslikta([
+            'HTTP_AUTHORIZATION' => 'Bearer gercek',
+            'REDIRECT_HTTP_AUTHORIZATION' => 'Bearer eski',
+        ]));
+    }
+
     // --- Ayarlar entegrasyonu ---
 
     public function testTokenOrtamDegiskenindenOkunur(): void
