@@ -12,3 +12,4 @@ vendor/
 .phpunit.cache/
 var/
 .php.pid
+.env

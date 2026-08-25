@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Bist\App;
+use Bist\Config\Ayarlar;
 use Bist\Data\BosKaynak;
 use Bist\Data\KriterDeposu;
 use Bist\Http\GovdeHatasi;
@@ -10,12 +11,21 @@ use Bist\Http\GovdeOkuyucu;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-$dbYolu = getenv('E2E_DB_PATH') ?: (dirname(__DIR__) . '/var/bist.sqlite');
-@mkdir(dirname($dbYolu), 0o777, true);
+$ayarlar = Ayarlar::global(dirname(__DIR__));
+
+// 0o770: dizin dunyaya yazilabilir olmamali (#15/S6). @ kullanilmiyor;
+// basarisizlik gizlenirse teshis imkansizlasir.
+$dbDizini = dirname($ayarlar->dbYolu);
+if (!is_dir($dbDizini) && !mkdir($dbDizini, 0o770, true) && !is_dir($dbDizini)) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Veri dizini oluşturulamadı.';
+    exit;
+}
 
 $app = new App(
     kaynak: new BosKaynak(),
-    depo: new KriterDeposu($dbYolu),
+    depo: new KriterDeposu($ayarlar->dbYolu),
 );
 
 $yol = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -25,6 +35,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         // D9 (#13): govde SINIRLI okunur. post_max_size application/json
         // govdelerine uygulanmadigi icin sinir burada zorlanmak zorunda.
         $govde = (new GovdeOkuyucu(
+            azamiBayt: $ayarlar->azamiGovdeBayt,
             contentLength: isset($_SERVER['CONTENT_LENGTH'])
                 ? (int) $_SERVER['CONTENT_LENGTH']
                 : null,
