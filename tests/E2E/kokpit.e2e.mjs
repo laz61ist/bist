@@ -6,12 +6,12 @@
  * Sonra:
  *   node tests/E2E/kokpit.e2e.mjs
  */
-import pw from '/opt/node22/lib/node_modules/playwright/index.js';
-const { chromium } = pw;
+import { chromium } from 'playwright';
 
 const BASE = process.env.E2E_BASE || 'http://127.0.0.1:8200';
 const OUT = process.env.E2E_SHOT_DIR || '/tmp';
-const CHROME = process.env.E2E_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// Tarayici yolu verilmezse Playwright kendi indirdigini bulur.
+const CHROME = process.env.E2E_CHROME || undefined;
 
 const hatalar = [];
 let gecen = 0;
@@ -20,7 +20,7 @@ function kontrol(kosul, ad) {
   else { hatalar.push(ad); console.log(`  HATA ${ad}`); }
 }
 
-const b = await chromium.launch({ executablePath: CHROME });
+const b = await chromium.launch(CHROME ? { executablePath: CHROME } : {});
 const p = await b.newPage({ viewport: { width: 1400, height: 950 } });
 // Konsol hatalari yalnizca sayfa yukleme evresinde toplanir; testin kendi
 // 404/422 fetch cagrilari kasitlidir ve sayilmaz. Google Fonts bu sandbox'ta
