@@ -7,10 +7,28 @@ Lisans ve atıflar: [THIRD-PARTY.md](THIRD-PARTY.md).
 
 ## Deploy
 
+Yayınlanmış imaj — kurmaya gerek yok:
+
 ```bash
-docker build -t bist-kokpit .
 docker volume create bist-veri
 
+docker run -d --name bist -p 8080:80 \
+  -v bist-veri:/data \
+  -e BIST_YAZMA_TOKEN="$(openssl rand -base64 32)" \
+  61yusuf61/bist:latest
+```
+
+`:latest` her `main` birleşmesinde güncellenir. Belirli bir sürüme sabitlemek
+için commit SHA etiketini kullan (`61yusuf61/bist:3e66b61` gibi) — geri alma
+birimi budur.
+
+Yalnızca duman testlerini geçen imaj yayınlanır: yayın adımı imajı yeniden
+kurmaz, testlerden geçen imajın ta kendisini etiketleyip gönderir.
+
+Kaynaktan kurmak istersen:
+
+```bash
+docker build -t bist-kokpit .
 docker run -d --name bist -p 8080:80 \
   -v bist-veri:/data \
   -e BIST_YAZMA_TOKEN="$(openssl rand -base64 32)" \

@@ -21,6 +21,10 @@ veri kaynağı henüz bağlı değil, bu kasıtlıdır (temsili veri üretilmez)
 - WAL, `busy_timeout`, `VACUUM INTO` ile yedekleme
 - Production Docker imajı (Apache + mod_php, docroot `public/`, volume `/data`)
 - CI: birim testleri, Playwright E2E, Docker imajı + duman testi, Pages yayını
+- Docker Hub yayını: `61yusuf61/bist:latest` ve commit SHA etiketi;
+  yalnızca duman testlerini geçen imaj gönderilir, yeniden kurulmaz
+- Apache `CGIPassAuth On` — bu satır olmadan `Authorization` başlığı
+  PHP'ye hiç ulaşmıyor ve doğru token 401 dönüyordu
 
 ### Güvenlik
 - Girdi boyutu sınırlandı — 12 MB gövde `201` yerine `413` (#13)
