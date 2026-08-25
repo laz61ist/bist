@@ -19,6 +19,17 @@ use InvalidArgumentException;
 /** Kokpit uygulamasinin giris noktasi. */
 final class App
 {
+    /**
+     * Alan bazli sinirlar (D9 / #13).
+     *
+     * Govde boyutu sinirlansa bile 64 KB icine binlerce kisa kriter sigar.
+     * Bu yuzden alan sayisi ve uzunlugu AYRICA denetlenir. Uzunluklar
+     * karakter cinsindendir; Turkce karakterler UTF-8'de cok bayt tutar.
+     */
+    public const AZAMI_KRITER = 50;
+    public const AZAMI_AD = 120;
+    public const AZAMI_GEREKCE = 2000;
+
     public function __construct(
         private readonly VeriKaynagi $kaynak = new BosKaynak(),
         private readonly ?KriterDeposu $depo = null,
@@ -75,19 +86,63 @@ final class App
         $ad = trim((string) ($post['ad'] ?? ''));
         $gerekce = trim((string) ($post['gerekce'] ?? ''));
         $ham = $post['kriterler'] ?? [];
+        $ham = is_array($ham) ? $ham : [];
+
+        if (mb_strlen($ad, 'UTF-8') > self::AZAMI_AD) {
+            return $this->json([
+                'hata' => sprintf('ad en fazla %d karakter olabilir.', self::AZAMI_AD),
+            ], 422);
+        }
+
+        if (mb_strlen($gerekce, 'UTF-8') > self::AZAMI_GEREKCE) {
+            return $this->json([
+                'hata' => sprintf('gerekce en fazla %d karakter olabilir.', self::AZAMI_GEREKCE),
+            ], 422);
+        }
+
+        if (count($ham) > self::AZAMI_KRITER) {
+            return $this->json([
+                'hata' => sprintf('En fazla %d kriter kabul edilir.', self::AZAMI_KRITER),
+            ], 422);
+        }
+
+        $kriterler = [];
+        foreach ($ham as $k) {
+            $kriterAdi = (string) ($k['ad'] ?? '');
+
+            if (mb_strlen($kriterAdi, 'UTF-8') > self::AZAMI_AD) {
+                return $this->json([
+                    'hata' => sprintf('Kriter adı en fazla %d karakter olabilir.', self::AZAMI_AD),
+                ], 422);
+            }
+
+            $operator = Operator::tryFrom((string) ($k['operator'] ?? '<'));
+            if ($operator === null) {
+                // Istisna mesajini oldugu gibi dondurmek ic namespace'i sizdirir (#15/S4).
+                return $this->json([
+                    'hata' => 'operator geçersiz.',
+                    'kabul_edilen' => array_map(
+                        static fn (Operator $o): string => $o->value,
+                        Operator::cases(),
+                    ),
+                ], 422);
+            }
+
+            $kriterler[] = new Kriter(
+                $kriterAdi,
+                (string) ($k['anahtar'] ?? ''),
+                $operator,
+                (float) ($k['esik'] ?? 0),
+            );
+        }
 
         try {
-            $kriterler = [];
-            foreach (is_array($ham) ? $ham : [] as $k) {
-                $kriterler[] = new Kriter(
-                    (string) ($k['ad'] ?? ''),
-                    (string) ($k['anahtar'] ?? ''),
-                    Operator::from((string) ($k['operator'] ?? '<')),
-                    (float) ($k['esik'] ?? 0),
-                );
-            }
-            $id = $this->depo->kaydet($ad === '' ? 'Adsız set' : $ad, new KriterSeti($kriterler), $gerekce);
-        } catch (InvalidArgumentException | \ValueError $e) {
+            $id = $this->depo->kaydet(
+                $ad === '' ? 'Adsız set' : $ad,
+                new KriterSeti($kriterler),
+                $gerekce,
+            );
+        } catch (InvalidArgumentException $e) {
             return $this->json(['hata' => $e->getMessage()], 422);
         }
 
