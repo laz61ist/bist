@@ -7,3 +7,8 @@ incoming/*
 .server.pid
 server.log
 _site/
+vendor/
+
+.phpunit.cache/
+var/
+.php.pid

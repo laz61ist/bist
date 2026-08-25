@@ -5,6 +5,33 @@ Borsa İstanbul analiz sistemi — skill'ler, dokümantasyon ve yayın altyapıs
 Kaynak paket: Eren Gül Aydın, *Borsa İstanbul Analiz Sistemi* (Apache 2.0).
 Lisans ve atıflar: [THIRD-PARTY.md](THIRD-PARTY.md).
 
+## Kokpit uygulaması
+
+PHP 8.3+ MVC, sqlite, sıfır JS bağımlılığı. Kokpit tek HTML dosyası olarak üretilir.
+
+```bash
+composer install
+E2E_DB_PATH=/tmp/bist.sqlite php -S 127.0.0.1:8200 -t public tests/E2E/AppServerRouter.php
+```
+
+`http://127.0.0.1:8200/` — kokpit · `/saglik` — durum · `/kriter` — kriter setleri (GET/POST)
+
+**Veri kaynağı bağlı değil.** Bu kasıtlıdır: temsili veri üretilmez (G-15).
+Her metrik `—` gösterir, nedenini ve kullanıcının yapabileceği eylemi yazar.
+Gerçek veri için `Bist\Data\VeriKaynagi` arayüzünü uygulayan bir sınıf bağlanır.
+
+### Neyi garanti eder
+
+| Kural | Nerede |
+|---|---|
+| Kaynaksız veya dönemsiz rakam kurulamaz | `Metrik` yapıcısı istisna atar |
+| Dönemlerin TMS 29 durumu farklıysa büyüme **hesaplanmaz** | `Tms29Kontrol` |
+| Değer işaret değiştirdiyse yüzde üretilmez, mutlak fark döner | `Tms29Kontrol` |
+| Payda ≤ 0 ise oran tanımsızdır | `Oran` |
+| Eşik tanımlanmadan tarama çalışmaz | `KriterSeti` |
+| Veri eksikse "geçti/kaldı" denmez, ayrı gruba girer | `KriterTarama` |
+| Çıktıda al/sat/hedef fiyat/niteleyici sıfat yok | test ile sabitlenmiş |
+
 ## Yapı
 
 ```
@@ -94,7 +121,17 @@ python3 tools/make_skill_zips.py
 ## Test
 
 ```bash
-python3 tools/test_zip_to_md.py
-python3 tools/test_site.py
-python3 tools/test_skill_zips.py
+python3 tools/test_zip_to_md.py     # zip -> md
+python3 tools/test_site.py          # render + statik site
+python3 tools/test_skill_zips.py    # skill zip yapısı
+./vendor/bin/phpunit                # 92 birim testi
+./tests/E2E/calistir.sh             # 27 E2E kontrolü + ekran görüntüsü
 ```
+
+E2E kendi sunucusunu ayağa kaldırır, temiz sqlite kullanır, Playwright ile
+sayfayı gezip PNG alır ve sonunda temizler.
+
+## Rehber ve araştırma
+
+- [`docs/REHBER-SAYFA-HARITASI.md`](docs/REHBER-SAYFA-HARITASI.md) — kurulum rehberinin 12 sayfası, sayfa sayfa, 24 numaralı gereksinime çevrilmiş
+- [`docs/arastirma/`](docs/arastirma/) — akademik tarama. **Yöntem kısıtını önce okuyun:** tam metin erişimi engellendiği için tam okunan kaynak sayısı 0'dır.

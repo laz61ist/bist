@@ -1,0 +1,129 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Bist;
+
+use Bist\Data\BosKaynak;
+use Bist\Data\KriterDeposu;
+use Bist\Data\MetrikSozlugu;
+use Bist\Data\VeriKaynagi;
+use Bist\Domain\Kriter;
+use Bist\Domain\KriterSeti;
+use Bist\Domain\KriterTarama;
+use Bist\Domain\Operator;
+use Bist\Render\Kokpit;
+use Bist\Render\KokpitRenderer;
+use InvalidArgumentException;
+
+/** Kokpit uygulamasinin giris noktasi. */
+final class App
+{
+    public function __construct(
+        private readonly VeriKaynagi $kaynak = new BosKaynak(),
+        private readonly ?KriterDeposu $depo = null,
+    ) {
+    }
+
+    /**
+     * @param array<string, mixed> $get
+     * @param array<string, mixed> $post
+     * @return array{durum: int, tur: string, govde: string}
+     */
+    public function calistir(string $yol, string $yontem = 'GET', array $get = [], array $post = []): array
+    {
+        return match (true) {
+            $yol === '/saglik' => $this->json(['durum' => 'ok', 'kaynak' => $this->kaynak->ad()]),
+            $yol === '/' || $yol === '/kokpit' => $this->kokpit($get),
+            $yol === '/kriter' && $yontem === 'POST' => $this->kriterKaydet($post),
+            $yol === '/kriter' => $this->kriterListe(),
+            default => ['durum' => 404, 'tur' => 'text/html; charset=utf-8', 'govde' => $this->sayfa404()],
+        };
+    }
+
+    /** @param array<string, mixed> $get */
+    private function kokpit(array $get): array
+    {
+        $kod = strtoupper(trim((string) ($get['sirket'] ?? 'TTRAK')));
+        if (!preg_match('/^[A-Z0-9]{1,10}$/', $kod)) {
+            $kod = 'TTRAK';
+        }
+
+        $metrikler = array_map(
+            fn (string $anahtar) => $this->kaynak->metrik($kod, $anahtar),
+            MetrikSozlugu::anahtarlar(),
+        );
+
+        $html = (new KokpitRenderer())->render(new Kokpit(
+            sirketKodu: $kod,
+            kaynak: $this->kaynak,
+            metrikler: $metrikler,
+            baslik: 'Kokpit',
+            altBaslik: 'Her rakamın yanında kaynağı ve dönemi yazar. Bulunamayan veri gizlenmez.',
+        ));
+
+        return ['durum' => 200, 'tur' => 'text/html; charset=utf-8', 'govde' => $html];
+    }
+
+    /** @param array<string, mixed> $post */
+    private function kriterKaydet(array $post): array
+    {
+        if ($this->depo === null) {
+            return $this->json(['hata' => 'Kriter deposu yapılandırılmadı.'], 503);
+        }
+
+        $ad = trim((string) ($post['ad'] ?? ''));
+        $gerekce = trim((string) ($post['gerekce'] ?? ''));
+        $ham = $post['kriterler'] ?? [];
+
+        try {
+            $kriterler = [];
+            foreach (is_array($ham) ? $ham : [] as $k) {
+                $kriterler[] = new Kriter(
+                    (string) ($k['ad'] ?? ''),
+                    (string) ($k['anahtar'] ?? ''),
+                    Operator::from((string) ($k['operator'] ?? '<')),
+                    (float) ($k['esik'] ?? 0),
+                );
+            }
+            $id = $this->depo->kaydet($ad === '' ? 'Adsız set' : $ad, new KriterSeti($kriterler), $gerekce);
+        } catch (InvalidArgumentException | \ValueError $e) {
+            return $this->json(['hata' => $e->getMessage()], 422);
+        }
+
+        return $this->json(['id' => $id], 201);
+    }
+
+    private function kriterListe(): array
+    {
+        if ($this->depo === null) {
+            return $this->json(['setler' => []]);
+        }
+
+        return $this->json(['setler' => array_map(static fn ($k): array => [
+            'id' => $k->id,
+            'ad' => $k->ad,
+            'gerekce' => $k->gerekce,
+            'kriter_sayisi' => $k->seti->sayi(),
+            'olusturma' => $k->olusturma,
+        ], $this->depo->hepsi())]);
+    }
+
+    /** @param array<string, mixed> $veri */
+    private function json(array $veri, int $durum = 200): array
+    {
+        return [
+            'durum' => $durum,
+            'tur' => 'application/json; charset=utf-8',
+            'govde' => json_encode($veri, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        ];
+    }
+
+    private function sayfa404(): string
+    {
+        return '<!doctype html><html lang="tr"><head><meta charset="utf-8">'
+            . '<title>404</title></head><body style="background:#0D0D0D;color:#F2F2F2;'
+            . 'font-family:sans-serif;padding:40px"><h1>404</h1>'
+            . '<p>Sayfa yok. <a href="/" style="color:#FF6B00">Kokpite dön</a></p></body></html>';
+    }
+}

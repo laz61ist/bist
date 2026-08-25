@@ -31,6 +31,16 @@ jobs:
         run: python3 tools/test_site.py
       - name: skill zip testleri
         run: python3 tools/test_skill_zips.py
+      - name: PHP kurulumu
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring
+          coverage: none
+      - name: Composer bagimliliklari
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: PHPUnit
+        run: ./vendor/bin/phpunit --testsuite Unit
 
   build:
     name: Site kur
