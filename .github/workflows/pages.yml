@@ -222,11 +222,47 @@ jobs:
             echo "hazir=hayir" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # --password-stdin: sir komut satirinda, dolayisiyla surec
-          # listesinde gorunmez.
-          echo "$GECIS" | docker login -u "$KULLANICI" --password-stdin
-          echo "Docker Hub oturumu acildi: $KULLANICI"
-          echo "hazir=evet" >> "$GITHUB_OUTPUT"
+
+          # Yapistirma sirasinda deger sonuna satir sonu ya da bosluk
+          # karismasi cok yaygin. Bunlar temizlenmezse Docker Hub
+          #   unknown: malformed HTTP Authorization header
+          # doner — "yanlis sifre" degil, "bozuk baslik" hatasi.
+          temizle() { printf '%s' "$1" | tr -d '\r\n\t' | sed -e 's/^ *//' -e 's/ *$//'; }
+          K="$(temizle "$KULLANICI")"
+          G="$(temizle "$GECIS")"
+
+          if [ "$K" != "$KULLANICI" ] || [ "$G" != "$GECIS" ]; then
+            echo "UYARI: secret degerinde bosluk/satir sonu vardi, temizlendi."
+            echo "       Kalici cozum icin secret'i bosluksuz yeniden kaydet."
+          fi
+
+          if printf '%s' "$G" | docker login -u "$K" --password-stdin; then
+            echo "Docker Hub oturumu acildi."
+            echo "hazir=evet" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Buraya dusuldugunde teshis sart. DEPO HERKESE ACIK, dolayisiyla
+          # loga sirrin kendisi ya da uzunlugu YAZILMAZ; yalnizca
+          # evet/hayir nitelikleri yazilir.
+          echo "----- TESHIS -----"
+          onek=hayir; case "$G" in dckr_pat_*) onek=evet;; esac
+          echo "token 'dckr_pat_' ile basliyor      : $onek"
+          bosluk=hayir; case "$K" in *" "*) bosluk=evet;; esac
+          echo "kullanici adinda bosluk var         : $bosluk"
+          kolon=hayir; case "$K" in *:*) kolon=evet;; esac
+          echo "kullanici adinda iki nokta var      : $kolon"
+          egik=hayir; case "$K" in */*) egik=evet;; esac
+          echo "kullanici adinda egik cizgi var     : $egik"
+          bosluk2=hayir; case "$G" in *" "*) bosluk2=evet;; esac
+          echo "token icinde bosluk var             : $bosluk2"
+          echo
+          echo "Beklenen: kullanici adi sade bir Docker Hub kullanici adi"
+          echo "(bosluk, iki nokta, egik cizgi YOK). Token ise Docker Hub"
+          echo "> Account settings > Personal access tokens ile uretilmis,"
+          echo "Read & Write yetkili, 'dckr_pat_' ile baslayan bir deger."
+          echo "Sifre DEGIL, komut satiri DEGIL, imaj adi DEGIL."
+          exit 1
 
       # Yayin YALNIZCA main'e push'ta. PR'da (catal PR'lar dahil) asla.
       # Yeniden KURULMUYOR: yukarida duman testlerini gecen imajin TA
