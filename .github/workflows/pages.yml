@@ -29,6 +29,8 @@ jobs:
         run: python3 tools/test_zip_to_md.py
       - name: render + site testleri
         run: python3 tools/test_site.py
+      - name: skill zip testleri
+        run: python3 tools/test_skill_zips.py
 
   build:
     name: Site kur
