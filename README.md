@@ -5,6 +5,53 @@ Borsa İstanbul analiz sistemi — skill'ler, dokümantasyon ve yayın altyapıs
 Kaynak paket: Eren Gül Aydın, *Borsa İstanbul Analiz Sistemi* (Apache 2.0).
 Lisans ve atıflar: [THIRD-PARTY.md](THIRD-PARTY.md).
 
+## Deploy
+
+```bash
+docker build -t bist-kokpit .
+docker volume create bist-veri
+
+docker run -d --name bist -p 8080:80 \
+  -v bist-veri:/data \
+  -e BIST_YAZMA_TOKEN="$(openssl rand -base64 32)" \
+  bist-kokpit
+```
+
+### Zorunlu üç kural
+
+1. **Instance sayısı 1 olmalı.** Sqlite tek dosyadır; ağ dosya sistemlerinde
+   kilitleme güvenli değildir. İki instance aynı dosyayı paylaşırsa bozulma
+   riski, paylaşmazsa kullanıcı farklı veri görür. **Bu uygulama yatay
+   ölçeklenemez** — kusur değil, kısıt.
+2. **`/data` kalıcı bir volume olmalı.** Bağlanmazsa kullanıcının kaydettiği
+   kriter setleri her yeniden başlatmada **sessizce** kaybolur.
+3. **`php -S` production yolu değildir.** `tests/E2E/AppServerRouter.php` bir
+   test yönlendiricisidir; PHP el kitabı yerleşik sunucuyu production dışı
+   olarak işaretler.
+
+### Ortam değişkenleri
+
+| Değişken | Varsayılan | Not |
+|---|---|---|
+| `BIST_ENV` | `production` | Belirtilmezse en kısıtlı mod. Yazım hatası da production'a düşer. |
+| `BIST_DB_PATH` | `/data/bist.sqlite` | Kalıcı volume'e işaret etmeli |
+| `BIST_YAZMA_TOKEN` | — | **Boşsa `/kriter` uçları tamamen kapalı**, pano salt okunur. En az 20 karakter. |
+| `BIST_AZAMI_GOVDE_BAYT` | `65536` | `post_max_size` JSON gövdelere uygulanmadığı için sınır burada |
+
+Örnek: [`.env.example`](.env.example)
+
+### Yedekleme
+
+```bash
+docker exec bist php -r '
+  require "/uygulama/vendor/autoload.php";
+  (new Bist\Data\KriterDeposu("/data/bist.sqlite"))->yedekle("/data/yedek.sqlite");
+'
+```
+
+`VACUUM INTO` kullanılır; WAL modunda dosyayı düz kopyalamak bozuk yedek
+üretebilir. **Geri yüklemeyi denemeden yedeğin olduğunu söyleyemezsin.**
+
 ## Kokpit uygulaması
 
 PHP 8.3+ MVC, sqlite, sıfır JS bağımlılığı. Kokpit tek HTML dosyası olarak üretilir.

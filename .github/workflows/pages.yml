@@ -93,9 +93,111 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  imaj:
+    name: Docker imaji
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Imaji kur
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: bist-kokpit:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Duman testi — salt okunur kurulum (token yok)
+        run: |
+          docker run -d --name bist-ro -p 8300:80 bist-kokpit:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8300/saglik >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          echo "--- K1: kokpit acilmali ---"
+          kod=$(curl -s -o /tmp/kokpit.html -w '%{http_code}' http://127.0.0.1:8300/)
+          test "$kod" = "200" || { echo "kokpit $kod dondu"; docker logs bist-ro; exit 1; }
+          grep -q TTRAK /tmp/kokpit.html || { echo "kokpit icerigi yok"; exit 1; }
+
+          echo "--- K5: saglik DB'ye dokunmali ---"
+          curl -s http://127.0.0.1:8300/saglik | tee /tmp/saglik.json
+          grep -q '"db":"ok"' /tmp/saglik.json || { echo "saglik bozuk"; exit 1; }
+
+          echo "--- K7: token yokken yazma kapali ---"
+          kod=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' -d '{"ad":"x","kriterler":[]}' \
+            http://127.0.0.1:8300/kriter)
+          test "$kod" = "403" || { echo "yazma acik kalmis: $kod"; exit 1; }
+
+          echo "--- docroot disi dosyalar erisilemez olmali ---"
+          for yol in /composer.json /vendor/autoload.php /../data/bist.sqlite /src/App.php; do
+            kod=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8300$yol")
+            test "$kod" = "404" || { echo "$yol erisilebilir: $kod"; exit 1; }
+            echo "  $yol -> $kod"
+          done
+
+          echo "--- X-Powered-By sizmamali (#15/S7) ---"
+          curl -sI http://127.0.0.1:8300/ | grep -i 'x-powered-by' && { echo "sizinti"; exit 1; }
+          echo "  temiz"
+
+          docker rm -f bist-ro
+
+      - name: Duman testi — token'li kurulum + kalicilik (K2)
+        run: |
+          docker volume create bist-veri
+          TOK="ci-tokeni-yirmi-karakterden-cok-daha-uzun"
+          docker run -d --name bist-rw -p 8301:80 \
+            -v bist-veri:/data -e BIST_YAZMA_TOKEN="$TOK" bist-kokpit:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8301/saglik >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          echo "--- K7: tokensiz 401 ---"
+          kod=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"ad":"x","kriterler":[{"ad":"F/K","anahtar":"fk","operator":"<","esik":12}]}' \
+            http://127.0.0.1:8301/kriter)
+          test "$kod" = "401" || { echo "tokensiz gecti: $kod"; exit 1; }
+
+          echo "--- dogru tokenla yazma ---"
+          kod=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' -H "Authorization: Bearer $TOK" \
+            -d '{"ad":"Kalici set","gerekce":"Yeniden baslatmayi asmali","kriterler":[{"ad":"F/K","anahtar":"fk","operator":"<","esik":12}]}' \
+            http://127.0.0.1:8301/kriter)
+          test "$kod" = "201" || { echo "yazma basarisiz: $kod"; docker logs bist-rw; exit 1; }
+
+          echo "--- K2: konteyneri YENIDEN OLUSTUR, veri durmali ---"
+          docker rm -f bist-rw
+          docker run -d --name bist-rw2 -p 8302:80 \
+            -v bist-veri:/data -e BIST_YAZMA_TOKEN="$TOK" bist-kokpit:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8302/saglik >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -s -H "Authorization: Bearer $TOK" http://127.0.0.1:8302/kriter | tee /tmp/liste.json
+          grep -q 'Kalici set' /tmp/liste.json || { echo "VERI KAYBI"; exit 1; }
+          grep -q 'Yeniden baslatmayi asmali' /tmp/liste.json || { echo "gerekce kayboldu"; exit 1; }
+          echo "  veri yeniden olusturmayi asti"
+
+          echo "--- D3: WAL acik mi ---"
+          docker exec bist-rw2 php -r '
+            $p = new PDO("sqlite:/data/bist.sqlite");
+            $m = $p->query("PRAGMA journal_mode")->fetchColumn();
+            echo "journal_mode=$m\n";
+            exit(strtolower($m) === "wal" ? 0 : 1);
+          '
+
+          docker rm -f bist-rw2
+          docker volume rm bist-veri
+
   build:
     name: Site kur
-    needs: [test, e2e]
+    needs: [test, e2e, imaj]
     # Yayin yalnizca main'den; PR'da test ve e2e kosar, deploy kosmaz.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
