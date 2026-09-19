@@ -1,0 +1,132 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Konsol komutları:
+ *   migrate | migrate:rollback | migrate:status
+ *   seed [--demo]                    demo verisi (DEMO_ önekli)
+ *   key:generate                     .env için APP_KEY üretir
+ *   user:create --email= --password= --name= [--role=admin]
+ *   dues:generate --building=ID --period=YYYY-MM   onaylı aylık planları işler
+ *   recurring:generate [--period=YYYY-MM]          periyodik giderleri üretir
+ *   latefee:apply [--building=ID] [--date=YYYY-MM-DD]
+ *   reminders:send [--building=ID]                 borç hatırlatma bildirimleri
+ *   backup                                          yedek dosyası üretir
+ *   serve [--port=8090]
+ */
+
+use Aidat\Core\Migrator;
+use Aidat\Services\BackupService;
+use Aidat\Services\ChargeService;
+use Aidat\Services\LateFeeService;
+use Aidat\Services\NotificationService;
+use Aidat\Services\RecurringExpenseService;
+use Aidat\Database\Seeds\DemoSeeder;
+
+$app = require dirname(__DIR__) . '/app/bootstrap.php';
+$argv = $_SERVER['argv'];
+array_shift($argv);
+$command = $argv[0] ?? 'help';
+$opts = [];
+foreach (array_slice($argv, 1) as $arg) {
+    if (str_starts_with($arg, '--')) {
+        [$k, $v] = array_pad(explode('=', substr($arg, 2), 2), 2, '1');
+        $opts[$k] = $v;
+    }
+}
+$out = static fn (string $s) => fwrite(STDOUT, $s . PHP_EOL);
+$err = static function (string $s): never {
+    fwrite(STDERR, 'HATA: ' . $s . PHP_EOL);
+    exit(1);
+};
+$db = $app->db();
+$migrator = new Migrator($db, $app->basePath . '/database/migrations');
+
+try {
+    switch ($command) {
+        case 'migrate':
+            $ran = $migrator->migrate();
+            $out($ran === [] ? 'Uygulanacak migrasyon yok.' : 'Uygulandı: ' . PHP_EOL . '  ' . implode(PHP_EOL . '  ', $ran));
+            break;
+        case 'migrate:rollback':
+            $rolled = $migrator->rollback();
+            $out($rolled === [] ? 'Geri alınacak migrasyon yok.' : 'Geri alındı: ' . implode(', ', $rolled));
+            break;
+        case 'migrate:status':
+            $pending = $migrator->pending();
+            $out('Bekleyen: ' . ($pending === [] ? 'yok' : implode(', ', $pending)));
+            break;
+        case 'seed':
+            $migrator->migrate();
+            $seeder = new DemoSeeder($app);
+            $result = $seeder->run();
+            $out($result);
+            break;
+        case 'key:generate':
+            $out('APP_KEY=' . bin2hex(random_bytes(32)));
+            break;
+        case 'user:create':
+            $email = mb_strtolower(trim((string) ($opts['email'] ?? '')));
+            $password = (string) ($opts['password'] ?? '');
+            $name = trim((string) ($opts['name'] ?? 'Yönetici'));
+            $role = (string) ($opts['role'] ?? 'admin');
+            if ($email === '' || $password === '') {
+                $err('--email ve --password zorunlu.');
+            }
+            if (strlen($password) < 8) {
+                $err('Şifre en az 8 karakter olmalı.');
+            }
+            if ($db->fetch('SELECT id FROM users WHERE email = ?', [$email]) !== null) {
+                $err('Bu e-posta zaten kayıtlı.');
+            }
+            $id = $db->insert('users', [
+                'name' => $name,
+                'email' => $email,
+                'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                'role' => $role,
+                'is_active' => 1,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+            $out("Kullanıcı oluşturuldu: #{$id} {$email} ({$role})");
+            break;
+        case 'dues:generate':
+            $buildingId = (int) ($opts['building'] ?? 0);
+            $period = (string) ($opts['period'] ?? date('Y-m'));
+            $service = new ChargeService($app);
+            $n = $service->generateRecurringPlans($buildingId > 0 ? $buildingId : null, $period);
+            $out("{$period} dönemi için {$n} tahakkuk üretildi.");
+            break;
+        case 'recurring:generate':
+            $period = (string) ($opts['period'] ?? date('Y-m'));
+            $n = (new RecurringExpenseService($app))->generate($period);
+            $out("{$period} dönemi için {$n} periyodik gider kaydı üretildi.");
+            break;
+        case 'latefee:apply':
+            $buildingId = (int) ($opts['building'] ?? 0);
+            $date = (string) ($opts['date'] ?? date('Y-m-d'));
+            $result = (new LateFeeService($app))->applyAll($buildingId > 0 ? $buildingId : null, $date);
+            $out("Gecikme tazminatı: {$result['created']} yeni, {$result['updated']} güncellendi, toplam " . \Aidat\Core\Money::format($result['amount']));
+            break;
+        case 'reminders:send':
+            $buildingId = (int) ($opts['building'] ?? 0);
+            $n = (new NotificationService($app))->sendDebtReminders($buildingId > 0 ? $buildingId : null);
+            $out("{$n} hatırlatma kuyruğa alındı/gönderildi.");
+            break;
+        case 'backup':
+            $path = (new BackupService($app))->create();
+            $out('Yedek alındı: ' . $path);
+            break;
+        case 'serve':
+            $port = (int) ($opts['port'] ?? 8090);
+            $out("http://127.0.0.1:{$port} adresinde çalışıyor (Ctrl+C ile durdur)");
+            passthru(sprintf('php -S 127.0.0.1:%d -t %s %s', $port, escapeshellarg($app->basePath . '/public'), escapeshellarg($app->basePath . '/public/index.php')));
+            break;
+        default:
+            $out(trim((string) file_get_contents(__FILE__, false, null, 0, 900)));
+    }
+} catch (Throwable $e) {
+    $err($e->getMessage() . ($app->isDebug() ? PHP_EOL . $e->getTraceAsString() : ''));
+}

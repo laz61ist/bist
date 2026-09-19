@@ -1,0 +1,2 @@
+<?= $this->partial('partials.page-head', ['title' => 'Devir tutanağı', 'crumbs' => [['Devir ve oturum geçmişi', route('occupancies.index')], ['No ' . $h['door_no']]], 'actions' => '<a class="btn" target="_blank" href="' . e(route('handovers.show', ['id' => $h['id'], 'yazdir' => 1])) . '"><i class="bi bi-printer"></i>Yazdır</a><a class="btn btn-ghost" href="' . e(route('units.show', ['id' => $h['unit_id']])) . '">Bölüme git</a>']) ?>
+<div class="card"><div class="card-body"><?= $this->partial('manager.occupancies.handover-body', ['h' => $h]) ?></div></div>

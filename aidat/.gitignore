@@ -1,0 +1,11 @@
+/vendor/
+/node_modules/
+/.phpunit.cache/
+/.env
+/storage/logs/*
+/storage/uploads/*
+/storage/database/*
+/storage/backups/*
+/storage/cache/*
+!/storage/**/.gitkeep
+/var/
