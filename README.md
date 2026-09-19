@@ -200,3 +200,7 @@ sayfayı gezip PNG alır ve sonunda temizler.
 
 - [`docs/REHBER-SAYFA-HARITASI.md`](docs/REHBER-SAYFA-HARITASI.md) — kurulum rehberinin 12 sayfası, sayfa sayfa, 24 numaralı gereksinime çevrilmiş
 - [`docs/arastirma/`](docs/arastirma/) — akademik tarama. **Yöntem kısıtını önce okuyun:** tam metin erişimi engellendiği için tam okunan kaynak sayısı 0'dır.
+
+## Aidat Yönetim Sistemi (`aidat/`)
+
+Aynı depoda bağımsız bir uygulama: apartman/site aidat, tahsilat, makbuz, gelir-gider, bütçe ve şeffaflık yazılımı (Pure PHP 8.3 MVC). Kurulum ve belgeler için [aidat/README.md](aidat/README.md).

@@ -61,3 +61,16 @@ cp -r /tmp/sp/skills/. .claude/skills/
 # BIST skill'leri (docs/bist-sistem güncellendikten sonra)
 python3 tools/install_bist_skills.py
 ```
+
+## aidat/ uygulaması
+
+| Bileşen | Sürüm | Lisans | Konum |
+|---|---|---|---|
+| Alpine.js | 3.14.9 | MIT | aidat/public/assets/vendor/alpine |
+| Chart.js | 4.4.9 | MIT | aidat/public/assets/vendor/chartjs |
+| Bootstrap Icons | 1.13.1 | MIT | aidat/public/assets/vendor/bootstrap-icons |
+| qrcode-generator | 1.4.4 | MIT | aidat/public/assets/vendor/qrcode |
+| Fraunces (variable) | @fontsource-variable/fraunces 5.2.6 | OFL-1.1 | aidat/public/assets/vendor/fonts/fraunces |
+| IBM Plex Sans | @fontsource/ibm-plex-sans 5.2.5 | OFL-1.1 | aidat/public/assets/vendor/fonts/ibm-plex-sans |
+| IBM Plex Mono | @fontsource/ibm-plex-mono 5.2.5 | OFL-1.1 | aidat/public/assets/vendor/fonts/ibm-plex-mono |
+| PHPUnit (yalnızca geliştirme) | ^11.5 | BSD-3-Clause | composer |

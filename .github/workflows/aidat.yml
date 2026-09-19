@@ -1,0 +1,46 @@
+name: Aidat
+
+on:
+  push:
+    branches: [main]
+    paths: ['aidat/**', '.github/workflows/aidat.yml']
+  pull_request:
+    paths: ['aidat/**', '.github/workflows/aidat.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Birim + duman testleri
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aidat
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, zip
+          coverage: none
+      - name: Sözdizimi
+        run: find app bin config database public tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist --no-scripts
+      - name: PHPUnit
+        run: ./vendor/bin/phpunit --testsuite Unit
+      - name: Demo veri ve sunucu
+        run: |
+          php bin/aidat migrate
+          php bin/aidat seed
+          (php -S 127.0.0.1:8090 -t public public/index.php > /tmp/server.log 2>&1 &)
+          for _ in $(seq 1 20); do curl -sf http://127.0.0.1:8090/saglik >/dev/null && break; sleep 1; done
+      - name: Duman testi (yönetici)
+        run: tests/smoke.sh http://127.0.0.1:8090 demo.yonetici@aidat.local 'Demo1234!'
+      - name: Duman testi (malik)
+        run: tests/smoke-portal.sh http://127.0.0.1:8090 demo.malik@aidat.local 'Demo1234!'
+      - name: Sunucu günlüğü
+        if: failure()
+        run: cat /tmp/server.log; cat storage/logs/*.log || true

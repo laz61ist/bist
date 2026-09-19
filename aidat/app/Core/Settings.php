@@ -25,7 +25,7 @@ final class Settings
         'receipt_copies' => '2',
         'receipt_footer' => 'Bu makbuz elektronik ortamda üretilmiştir.',
         'receipt_signer_title' => 'Yönetici',
-        'debt_visibility' => 'kapi_no',
+        'debt_visibility' => 'gizli',
         'portal_show_expenses' => '1',
         'portal_show_expense_documents' => '1',
         'portal_show_accounts' => '1',
