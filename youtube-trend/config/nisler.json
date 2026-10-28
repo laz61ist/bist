@@ -1,0 +1,14 @@
+{
+  "region": "US",
+  "days": 30,
+  "niches": [
+    {"name": "Kids animated stories", "query": "kids animated story"},
+    {"name": "Bedtime stories", "query": "bedtime stories for kids"},
+    {"name": "AI animation shorts", "query": "ai animation short film"},
+    {"name": "Satisfying 3D animation", "query": "satisfying 3d animation"},
+    {"name": "Animal facts", "query": "animal facts for kids"},
+    {"name": "Motion graphics explainers", "query": "motion graphics explainer"},
+    {"name": "History explained", "query": "history explained animation"},
+    {"name": "Science facts", "query": "science facts animation"}
+  ]
+}
